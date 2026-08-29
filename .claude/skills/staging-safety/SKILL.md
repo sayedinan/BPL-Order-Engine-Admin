@@ -1,4 +1,5 @@
 ---
+name: staging-safety
 description: Rules for the bpl-order-engine staging container. Always check this before writing start/stop/status/log code for the Bpl engine, or before running any command that could reach staging.
 ---
 
