@@ -11,6 +11,13 @@ interface StatusCardProps {
    * without waiting up to 3 s for the next tick.
    */
   refreshTick: number;
+  /**
+   * Report every successful status fetch up to the parent so the
+   * Control Panel can enable/disable its buttons in real time.
+   * StatusCard stays the polling owner; the parent just receives a
+   * copy of the latest DTO.
+   */
+  onStatusLoaded: (data: EngineStatusResponse) => void;
 }
 
 const STATUS_LABEL: Record<EngineStatus, string> = {
@@ -32,7 +39,7 @@ function formatTime(iso: string | null | undefined): string {
  * Top-left card. Auto-refreshes every 3 s (per the prompt). Renders a
  * RUNNING (green) / STOPPED (red) / ERROR (yellow) badge.
  */
-export function StatusCard({ auth, refreshTick }: StatusCardProps) {
+export function StatusCard({ auth, refreshTick, onStatusLoaded }: StatusCardProps) {
   const [data, setData] = useState<EngineStatusResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,6 +49,7 @@ export function StatusCard({ auth, refreshTick }: StatusCardProps) {
       const next = await fetchStatus(auth, signal);
       setData(next);
       setError(null);
+      onStatusLoaded(next);
     },
     3000,
     true,
@@ -60,13 +68,14 @@ export function StatusCard({ auth, refreshTick }: StatusCardProps) {
       .then((next) => {
         setData(next);
         setError(null);
+        onStatusLoaded(next);
       })
       .catch((err) => {
         if (err instanceof DOMException && err.name === 'AbortError') return;
         setError(err instanceof Error ? err.message : 'Failed to load status');
       });
     return () => controller.abort();
-  }, [refreshTick, auth]);
+  }, [refreshTick, auth, onStatusLoaded]);
 
   return (
     <section className="card" aria-labelledby="status-card-title">

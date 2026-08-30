@@ -63,7 +63,11 @@ export function DashboardLayout() {
 
       <main className="app-main">
         <div className="dashboard-grid">
-          <StatusCard auth={auth} refreshTick={refreshTick} />
+          <StatusCard
+            auth={auth}
+            refreshTick={refreshTick}
+            onStatusLoaded={setStatus}
+          />
           <ControlPanel
             auth={auth}
             status={status?.status ?? null}
