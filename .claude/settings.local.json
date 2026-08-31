@@ -1,0 +1,30 @@
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://openrouter.ai/api",
+    "ANTHROPIC_AUTH_TOKEN": "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",
+    "ANTHROPIC_API_KEY": "",
+    "ANTHROPIC_MODEL": "minimax/minimax-m3:free",
+    "ANTHROPIC_SMALL_FAST_MODEL": "minimax/minimax-m3:free",
+    "CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT": "1"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(chmod +x \"D:/Engine Helm/.claude/hooks/guard-ssh.sh\")",
+      "Bash(dir D:\\\\Engine Helm *)",
+      "Bash(java -version)",
+      "Bash(mvn -v)",
+      "Bash(npm -v)",
+      "Read(//c/Program Files/**)",
+      "Read(//c/Program Files/Eclipse Adoptium/**)",
+      "Read(//c//**)",
+      "Bash(where mvn *)",
+      "Bash(where gradle *)",
+      "Bash(choco --version)",
+      "Bash(npm install *)",
+      "Bash(npm test *)",
+      "Bash(npm run *)",
+      "Bash(xargs -I {} wc -l {})",
+      "Bash(choco list *)"
+    ]
+  }
+}
