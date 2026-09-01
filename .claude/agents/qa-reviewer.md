@@ -30,7 +30,8 @@ preferences.
 - Every controller method on `/api/**` has `@PreAuthorize` (or `@Secured`) with a SpEL expression that matches the SPEC.md §3 role matrix.
 - The role matrix in v0.3 is **3 roles**: `SYS_ADMIN`, `ADMIN`, `USER`. v0.2's `VIEWER` is gone. If you see `hasRole('VIEWER')` in any annotation, that's a regression.
 - `ADMIN` cannot create/delete another `ADMIN` (only `SYS_ADMIN` can). Verify any user-management endpoint enforces this.
-- `USER` only sees engines in their `assignedRoles` set. The query for `/api/engines` must filter by `currentUser.assignedRoles.contains(engine.code)`, not return all engines. Same for `/{id}/start`, `/{id}/stop`, `/{id}/logs`, `/{id}/status`, `/{id}/logs/stream`. Trace the filter all the way to the SQL — a missing `.contains(...)` in a JPQL is a data leak.
+- `USER` only sees engines in their `assignedEngines` set. The query for `/api/engines` must filter by `currentUser.assignedEngines.contains(engine.code)`, not return all engines. Same for `/{id}/start`, `/{id}/stop`, `/{id}/logs`, `/{id}/status`, `/{id}/logs/stream`. Trace the filter all the way to the SQL — a missing `.contains(...)` in a JPQL is a data leak.
+- `GET /api/audit-logs` with `USER` role must return **403**, rejected outright — not partially filtered by `assignedEngines`, not scoped to `targetEngineCode IN (...)`. The query must not run for `USER` at all; the `@PreAuthorize` must fire before any repository call. A `USER` who gets a 200 with even one row is a **blocker** (audit-log leak). See SPEC.md §4.5.
 - `@PreAuthorize` on the class level is fine, but **verify** it covers every method, not just the obvious ones. The AspectJ proxy doesn't apply `@PreAuthorize` to private/internal methods called within the same class — flag any same-class self-invocation that bypasses security.
 
 ### 2. Audit log coverage (highest priority)
@@ -60,14 +61,15 @@ preferences.
 - All entities have UUID PKs, `@Version` for optimistic locking on write-heavy entities (`User`, `Engine`, `AuditLog`).
 - No Lombok `@Data` on entities. `@Getter`/`@Setter` only.
 - `equals`/`hashCode` on entities use `id` only (or are omitted entirely and rely on reference equality — both are acceptable, just be consistent).
-- Many-to-many (`User.assignedRoles` ↔ `Engine`) uses a `@JoinTable` with explicit name, NOT Hibernate's default.
+- Many-to-many (`User.assignedEngines` ↔ `Engine`) uses a `@JoinTable` with explicit name, NOT Hibernate's default.
 
 ### 6. UI diffs (when reviewing frontend-agent output)
 
 - `AuthContext` reads the JWT from storage and sends `Authorization: Bearer ...` on every request. The token is **never** stored in a non-`httpOnly` cookie.
-- The engine dashboard filters the engine list by `currentUser.assignedRoles` before rendering. A `USER` role must not see engines they don't have access to, even momentarily, even in the React DevTools state.
+- The engine dashboard filters the engine list by `currentUser.assignedEngines` before rendering. A `USER` role must not see engines they don't have access to, even momentarily, even in the React DevTools state.
 - The Admin Panel is not rendered at all for `USER` role. Hiding the route isn't enough — the component should not be in the bundle for `USER` (lazy import + role check, or just don't add the link).
 - Logout clears the token and redirects to `/login`. No "back button shows stale dashboard" leak.
+- The Logs page Source dropdown must hide `System Audit Logs` for `USER` role. The option must not be in the dropdown DOM at all (not just disabled, not just hidden — the user should not see a forbidden option that, on click, returns 403). See SPEC.md §5.4.
 
 ### 7. Stale references to v0.2 patterns
 

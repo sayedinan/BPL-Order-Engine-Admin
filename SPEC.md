@@ -322,7 +322,7 @@ Any future work that intentionally wires a real integration against the live BPL
 | Update engine SSH config | ✅ | ❌ | ❌ |
 | View engine status / logs | ✅ all | ✅ all | 🔒 assigned only |
 | Start / stop engine | ✅ all | ✅ all | 🔒 assigned only |
-| View audit logs | ✅ full system | ✅ full system | 🔒 assigned engines only |
+| View audit logs | ✅ full system | ✅ full system | ❌ |
 | View real-time engine logs (WS) | ✅ all | ✅ all | 🔒 assigned only |
 | Change own password (when `mustChangePassword = true`) | ✅ self | ✅ self | ✅ self |
 
@@ -601,10 +601,10 @@ The `mockImpl.forEngine(engine)` is a thin per-engine wrapper around the singlet
 
 ### 4.5 Audit log endpoint
 
-**`GET /api/audit-logs`** — depends on role
+**`GET /api/audit-logs`** — `SYS_ADMIN`, `ADMIN` only
 
 - `SYS_ADMIN`, `ADMIN`: full system audit log.
-- `USER`: only audit log rows whose `targetEngineCode` is in their `assignedEngines`. Rows with `targetEngineCode = null` (e.g., `LOGIN_SUCCESS`) are visible only to `SYS_ADMIN` / `ADMIN`.
+- `USER`: **403**, rejected outright — not filtered, not partially scoped. The audit log is admin-only. `USER` sees engine execution logs via `/api/engines/{code}/logs` and the WebSocket stream, but never the audit trail.
 - Query params: `actor`, `action`, `engine`, `from`, `to`, `page` (default 0), `size` (default 50, max 200). All optional. Invalid values → 400.
 - Response: `{ items: AuditLogResponse[], page, size, total }`.
 - The `details` jsonb is returned as a parsed JSON object, not a string.
@@ -691,7 +691,7 @@ Vite + React 19 + TypeScript 6 + React Router + Tailwind. Shadcn-style primitive
 | `/login` | `Login.tsx` | public |
 | `/change-password` | `ChangePassword.tsx` | all authenticated (any role, when `mustChangePassword = true`) |
 | `/dashboard` | `Dashboard.tsx` | all authenticated |
-| `/logs` | `Logs.tsx` | all authenticated |
+| `/logs` | `Logs.tsx` | all authenticated (USER sees a reduced view: `Engine Execution Logs` only — no `System Audit Logs`) |
 | `/admin` | `Admin.tsx` (lazy) | `SYS_ADMIN`, `ADMIN` |
 | `/404`, `/403` | `NotFound.tsx`, `Forbidden.tsx` | all |
 
@@ -730,7 +730,7 @@ While `mustChangePassword = true`, the `/change-password` page is the only authe
 ### 5.4 Logs page (`/logs`)
 
 - Two filter dropdowns:
-  - **Source:** `System Audit Logs` (default) | `Engine Execution Logs`.
+  - **Source:** `System Audit Logs` (default) | `Engine Execution Logs`. The `System Audit Logs` option is hidden for `USER`; they only see `Engine Execution Logs`.
   - **Engine:** all visible engines; only relevant when Source = `Engine Execution Logs`.
 - Audit logs come from `GET /api/audit-logs?actor=...&action=...&engine=...&from=...&to=...&page=...&size=...`.
 - Engine execution logs come from `GET /api/engines/{code}/logs?limit=100` plus the WebSocket stream for the selected engine.
