@@ -1,10 +1,12 @@
 package com.BPL_Order_Engine_Admin.manager.engine;
 
 /**
- * Lifecycle states for an order engine. The mock implementation only ever
- * transitions between {@link #STOPPED} and {@link #RUNNING}; {@link #ERROR}
- * exists so the contract is already compatible with a future real health
- * check that reports failures (see SPEC.md &sect;2.4 and &sect;5.2).
+ * Engine runtime status (SPEC §3.3 / API.md §2.5).
+ * <ul>
+ *   <li>{@code RUNNING} — the engine is up and accepting work.</li>
+ *   <li>{@code STOPPED} — the engine is down.</li>
+ *   <li>{@code ERROR} — a recent action (start/stop/script) failed; needs manual recovery.</li>
+ * </ul>
  */
 public enum EngineStatus {
     RUNNING,

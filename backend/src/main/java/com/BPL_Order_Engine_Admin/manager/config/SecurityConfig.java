@@ -1,108 +1,112 @@
 package com.BPL_Order_Engine_Admin.manager.config;
 
+import com.BPL_Order_Engine_Admin.manager.auth.JwtAuthFilter;
+import tools.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.core.userdetails.User;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.access.AccessDeniedHandler;
+import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.web.cors.CorsConfigurationSource;
 
+import java.time.Instant;
+import java.util.Map;
+
 /**
- * Spring Security configuration for the admin app.
+ * v0.3 Spring Security configuration (SPEC §4 / API.md §0.3).
  *
- * <p>Uses HTTP Basic with two in-memory users &mdash; one
- * {@code ADMIN} and one {@code VIEWER} &mdash; matching the credentials
- * listed in the task prompt. Path-based authorization enforces the role
- * matrix in SPEC &sect;3.4.
+ * <p>Filter chain: JWT filter (parses token + populates
+ * SecurityContext), then Spring Security's authorization rules.
  *
- * <p>CSRF is disabled because the API is consumed by a Vite SPA
- * sending JSON from a different origin (handled by {@link CorsConfig}).
- * Sessions are stateless so each request carries its own credentials
- * (typical for Basic auth).
+ * <p>Path matchers (per RBAC matrix):
+ * <ul>
+ *   <li>POST /api/auth/login — public.</li>
+ *   <li>POST /api/auth/logout — authenticated (any role).</li>
+ *   <li>GET /api/auth/me — authenticated.</li>
+ *   <li>POST /api/auth/change-password — authenticated.</li>
+ *   <li>GET /api/audit-logs — SYS_ADMIN, ADMIN (USER is 403 outright in the controller).</li>
+ *   <li>Everything else under /api/** — authenticated; the controller
+ *       enforces per-resource role checks via {@code @PreAuthorize}.</li>
+ *   <li>WS /api/engines/{code}/logs/stream — authenticated (the
+ *       handler enforces role + assignment in #20).</li>
+ * </ul>
+ *
+ * <p>CSRF disabled (API-only). Stateless sessions (JWT is the only
+ * auth). CORS via {@link CorsConfig}.
  */
 @Configuration
+@EnableMethodSecurity
 public class SecurityConfig {
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Bean
     public SecurityFilterChain securityFilterChain(
-            HttpSecurity http, CorsConfigurationSource corsConfigurationSource) throws Exception {
+            HttpSecurity http,
+            JwtAuthFilter jwtAuthFilter,
+            CorsConfigurationSource corsConfigurationSource) throws Exception {
         http
-                // Apply CORS from CorsConfig so the Vite dev origin can
-                // call /api/** with credentials.
-                .cors(c -> c.configurationSource(corsConfigurationSource))
-                // API-only, no server-rendered forms; CSRF off.
-                .csrf(AbstractHttpConfigurer::disable)
-                // Pure Basic auth, no server session.
-                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .httpBasic(b -> {})
-                // Role-based authorization (see SPEC &sect;3.4).
-                .authorizeHttpRequests(auth -> auth
-                        // READ endpoints: ADMIN or VIEWER.
-                        .requestMatchers(HttpMethod.GET, "/api/engines/*/status").hasAnyRole("ADMIN", "VIEWER")
-                        .requestMatchers(HttpMethod.GET, "/api/engines/*/logs").hasAnyRole("ADMIN", "VIEWER")
-                        // WRITE endpoints: ADMIN only.
-                        .requestMatchers(HttpMethod.POST, "/api/engines/*/start").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.POST, "/api/engines/*/stop").hasRole("ADMIN")
-                        // Spring's default error mapping endpoint must
-                        // remain reachable so unauthenticated/unauthorized
-                        // responses can be turned into the standard error
-                        // envelope by the dispatcher.
-                        .requestMatchers("/error").permitAll()
-                        // Everything else (incl. any future endpoints)
-                        // requires auth.
-                        .anyRequest().authenticated())
-                // Return 401 (not 403) when no credentials are present
-                // so the frontend can distinguish "not logged in" from
-                // "logged in but not allowed".
-                .exceptionHandling(eh -> eh
-                        .authenticationEntryPoint((req, res, ex) -> {
-                            res.setStatus(401);
-                            res.setContentType("application/json");
-                            res.getWriter().write(
-                                    "{\"status\":401,\"error\":\"Unauthorized\","
-                                            + "\"message\":\"Authentication required\","
-                                            + "\"path\":\"" + req.getRequestURI() + "\"}");
-                        })
-                        .accessDeniedHandler((req, res, ex) -> {
-                            res.setStatus(403);
-                            res.setContentType("application/json");
-                            res.getWriter().write(
-                                    "{\"status\":403,\"error\":\"Forbidden\","
-                                            + "\"message\":\"Access denied\","
-                                            + "\"path\":\"" + req.getRequestURI() + "\"}");
-                        }));
-
+            .cors(c -> c.configurationSource(corsConfigurationSource))
+            .csrf(AbstractHttpConfigurer::disable)
+            .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .authorizeHttpRequests(auth -> auth
+                .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
+                .requestMatchers("/error").permitAll()
+                .requestMatchers("/actuator/health").permitAll()
+                .anyRequest().authenticated())
+            .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+            .exceptionHandling(eh -> eh
+                .authenticationEntryPoint(unauthorizedEntryPoint())
+                .accessDeniedHandler(forbiddenHandler()))
+            .httpBasic(AbstractHttpConfigurer::disable)
+            .formLogin(AbstractHttpConfigurer::disable)
+            .logout(Customizer.withDefaults()); // disabled by STATELESS, but kept explicit
         return http.build();
     }
 
     @Bean
     public PasswordEncoder passwordEncoder() {
-        // BCrypt is the modern default; no plain-text passwords stored.
-        return new BCryptPasswordEncoder();
+        return new BCryptPasswordEncoder(10);
     }
 
-    @Bean
-    public UserDetailsService userDetailsService(PasswordEncoder encoder) {
-        UserDetails admin = User.builder()
-                .username("admin")
-                .password(encoder.encode("admin123"))
-                .roles("ADMIN")
-                .build();
+    /** 401 with the standard error envelope. */
+    private AuthenticationEntryPoint unauthorizedEntryPoint() {
+        return (request, response, ex) -> {
+            writeError(response, HttpStatus.UNAUTHORIZED, "Authentication required", request.getRequestURI(), null);
+        };
+    }
 
-        UserDetails viewer = User.builder()
-                .username("viewer")
-                .password(encoder.encode("viewer123"))
-                .roles("VIEWER")
-                .build();
+    /** 403 with the standard error envelope. Generic message — no resource path leak. */
+    private AccessDeniedHandler forbiddenHandler() {
+        return (request, response, ex) -> {
+            writeError(response, HttpStatus.FORBIDDEN, "Access denied", request.getRequestURI(), null);
+        };
+    }
 
-        return new InMemoryUserDetailsManager(admin, viewer);
+    private void writeError(HttpServletResponse response, HttpStatus status, String message, String path, Map<String, Object> details) throws java.io.IOException {
+        response.setStatus(status.value());
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        Map<String, Object> body = new java.util.LinkedHashMap<>();
+        body.put("timestamp", Instant.now().toString());
+        body.put("status", status.value());
+        body.put("error", status.getReasonPhrase());
+        body.put("message", message);
+        body.put("path", path);
+        if (details != null) {
+            body.put("details", details);
+        }
+        objectMapper.writeValue(response.getOutputStream(), body);
     }
 }

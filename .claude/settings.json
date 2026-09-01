@@ -31,7 +31,8 @@
       "Bash(python append_log.py \"2.5\" \"2.5.2\" \"Manual smoke: SYS_ADMIN sees Dashboard \\(BPL+PCL cards\\), Logs \\(audit+engine views\\), Admin \\(Users+Engines tabs\\); start/stop work; audit log paginates; engine form creates new engine\" \"frontend/src/pages/*.tsx\")",
       "Bash(python append_log.py \"2.5\" \"2.5.3\" \"Manual smoke: ADMIN sees Admin Panel; Engines tab is read-only \\(no Edit SSH/Delete\\); role select excludes ADMIN/SYS_ADMIN in UserForm\" \"frontend/src/pages/Admin.tsx\")",
       "Bash(python append_log.py \"2.5\" \"2.5.4\" \"Bundle check: USER bundle \\(index-*.js\\) does NOT contain UserForm \\(verified via grep\\); Admin chunk \\(Admin-*.js, 10.5kB lazy\\) only loads when route is visited\" \"frontend/dist/assets/\")",
-      "Bash(python append_log.py \"2.5\" \"2.5.5\" \"Phase 2 complete: 16 subtasks landed; full v0.3 frontend demoable against mock; ready to wire real backend or add screenshots\" \"SUBTASKS log.docx\")"
+      "Bash(python append_log.py \"2.5\" \"2.5.5\" \"Phase 2 complete: 16 subtasks landed; full v0.3 frontend demoable against mock; ready to wire real backend or add screenshots\" \"SUBTASKS log.docx\")",
+      "Bash(python append_log.py \"API\" \"API.1\" \"Write API.md: canonical v0.3 backend implementation contract \\(17 REST + 1 WS; matches SPEC §4 and frontend types\\)\" \"API.md\")"
     ],
     "deny": [
       "Read(./.env)",
