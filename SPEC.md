@@ -11,7 +11,7 @@
 | **Auth** | Spring Security + JWT (jjwt), JPA-backed `UserDetailsService`; HTTP Basic is **gone** |
 | **Engine I/O** | Apache MINA SSHD (REAL mode) + in-memory state machine (MOCK mode) — selected per `Engine.mode` |
 | **Presentation** | Wed Sep 2, 2026, 11:00 AM |
-| **Last updated** | Sep 1, 2026 |
+| **Last updated** | Sep 1, 2026 (addendum: force-change-password flow, in-scope clarification for §3.2 / §3.5 / §4.2 / §5.2 / §5.7) |
 
 > **v0.2 → v0.3 changes (this file supersedes v0.2 in its entirety):**
 >
@@ -26,6 +26,7 @@
 > - **Admin Panel.** v0.2 had no admin UI. v0.3 has an Admin Panel with Users and Engines tabs, gated by role and the `lazy-import + role check` pattern in `frontend-agent.md`.
 > - **Soft delete for engines.** v0.2 didn't have engine CRUD. v0.3 does, and engine deletion is soft (`Engine.deletedAt`); see §4.5.
 > - **The `OrderEngineOperations` interface is preserved across v0.2 → v0.3.** Only the implementation list and the factory's lookup source changed.
+- **Force-change-password on first login.** v0.2 had no password lifecycle. v0.3 adds `User.mustChangePassword` (default `true` on create), a `mustChangePassword` claim in the issued JWT and login response, a `POST /api/auth/change-password` endpoint (authenticated, body `{ currentPassword, newPassword }`), a `CHANGE_PASSWORD` audit row, a `/change-password` page, and a post-login redirect that lands on `/change-password` while the flag is `true`. This is the *force-change* flow — distinct from the deferred "Password reset / forgot-password flow" (unauthenticated recovery, which remains out of scope).
 
 > **Carry-forward from v0.2 (still true in v0.3):**
 >
@@ -323,6 +324,7 @@ Any future work that intentionally wires a real integration against the live BPL
 | Start / stop engine | ✅ all | ✅ all | 🔒 assigned only |
 | View audit logs | ✅ full system | ✅ full system | 🔒 assigned engines only |
 | View real-time engine logs (WS) | ✅ all | ✅ all | 🔒 assigned only |
+| Change own password (when `mustChangePassword = true`) | ✅ self | ✅ self | ✅ self |
 
 *Notes:*
 - *Role "BPL" does not exist as a string. Engine access is granted by adding the engine row to the user's `assignedEngines` set.*
@@ -339,6 +341,7 @@ Any future work that intentionally wires a real integration against the live BPL
 | `passwordHash` | String (≤ 100) | BCrypt; one-way; never `@Encrypted` (the hash is already safe to store) |
 | `roleType` | enum `RoleType` (`SYS_ADMIN`, `ADMIN`, `USER`) | A user has exactly one role. |
 | `assignedEngines` | `Set<Engine>` (`@ManyToMany`, `LAZY`) | The set of engines the user can see/control. Empty for `SYS_ADMIN` / `ADMIN` (they see all), non-empty for `USER`. |
+| `mustChangePassword` | boolean (NOT NULL, default `true`) | Force-change-password flag. `true` for newly created users; set to `false` by a successful `POST /api/auth/change-password`. Surfaced in the login response and as a JWT claim so the client can route to `/change-password`. See §4.2 and §5.2. |
 | `createdAt` | Instant | Immutable, set in `@PrePersist` |
 | `updatedAt` | Instant | Updated in `@PreUpdate` |
 
@@ -388,7 +391,8 @@ public enum AuditAction {
     CREATE_USER, DELETE_USER, UPDATE_USER_ROLES,
     CREATE_ENGINE, DELETE_ENGINE, UPDATE_ENGINE_SSH,
     START_ENGINE, STOP_ENGINE,
-    LOGIN_SUCCESS, LOGIN_FAIL, LOGOUT
+    LOGIN_SUCCESS, LOGIN_FAIL, LOGOUT,
+    CHANGE_PASSWORD
 }
 ```
 
@@ -474,12 +478,13 @@ The `mockImpl.forEngine(engine)` is a thin per-engine wrapper around the singlet
 { "username": "admin", "password": "..." }
 
 // response 200 OK
-{ "token": "eyJhbGciOi...", "expiresAt": "2026-09-01T17:02:11Z", "user": { "id": "...", "username": "admin", "role": "SYS_ADMIN", "assignedEngineCodes": [] } }
+{ "token": "eyJhbGciOi...", "expiresAt": "2026-09-01T17:02:11Z", "user": { "id": "...", "username": "admin", "role": "SYS_ADMIN", "assignedEngineCodes": [] }, "mustChangePassword": true }
 ```
 
 - 401 on bad credentials. `LOGIN_FAIL` audit row written with `reason: "BAD_CREDENTIALS"`. The response body's `message` is `"Invalid credentials"` — no enumeration of which field was wrong.
 - 403 if the user is disabled. `LOGIN_FAIL` with `reason: "USER_DISABLED"`. (Disabled users are not in v0.3's data model; the field is reserved for v0.4. The audit reason enum still exists so future code can write it without a migration.)
 - BCrypt verification with strength 10. No password is logged or returned, even hashed.
+- The `mustChangePassword` field in the response mirrors the `User.mustChangePassword` flag at login time. The same value is also carried in the JWT `mustChangePassword` claim so the client can route to `/change-password` from a fresh token without an extra round trip. The flag is `true` for newly created users and after a password rotation by an admin; it becomes `false` only after a successful `POST /api/auth/change-password`.
 
 **`POST /api/auth/logout`** — authenticated
 
@@ -489,10 +494,29 @@ The `mockImpl.forEngine(engine)` is a thin per-engine wrapper around the singlet
 
 ```json
 // response 200 OK
-{ "id": "...", "username": "admin", "role": "SYS_ADMIN", "assignedEngineCodes": ["BPL", "PCL"] }
+{ "id": "...", "username": "admin", "role": "SYS_ADMIN", "assignedEngineCodes": ["BPL", "PCL"], "mustChangePassword": false }
 ```
 
 - The client calls this on app load to hydrate the `AuthContext`. If the token is invalid/expired, returns 401; the client clears the token and redirects to `/login`.
+- `mustChangePassword` is read from the live `User` row (not the JWT claim) so a rotation by an admin mid-session is visible on the next `me` call.
+
+**`POST /api/auth/change-password`** — authenticated (any role)
+
+```json
+// request
+{ "currentPassword": "...", "newPassword": "..." }
+
+// response 200 OK
+{ "token": "eyJhbGciOi...", "expiresAt": "2026-09-02T01:02:11Z", "user": { "id": "...", "username": "admin", "role": "SYS_ADMIN", "assignedEngineCodes": [] }, "mustChangePassword": false }
+```
+
+- The caller must be authenticated. The current JWT is read from the `Authorization: Bearer …` header; no extra session lookup.
+- 400 if `currentPassword` or `newPassword` is missing/blank, or if `newPassword` fails the strength rule (min 12 chars, must include letters and digits; see §4.6.1 for the shared `PasswordStrength` validator).
+- 401 if `currentPassword` does not match the stored `passwordHash` (BCrypt verify with strength 10). The response body's `message` is `"Current password is incorrect"` — do not enumerate further.
+- 422 if the validator rejects the new password (same shape as other validation 422s).
+- On success: write a `CHANGE_PASSWORD` audit row with `details: { actorUsername, reason: "OK" }` (no plaintext or hash), set `User.mustChangePassword = false`, persist, and **issue a new JWT** with `mustChangePassword = false` in the claims. The client must replace the stored token with the new one; the old token remains valid until its existing `expiresAt` (8h from the original login), so the new token is the only one that authenticates the post-change session cleanly.
+- `@Audited(action = CHANGE_PASSWORD)` on the controller method. The aspect writes the row on success AND on the bad-current-password failure (with `details.reason: "BAD_CURRENT_PASSWORD"`); missing-field 400s are caught by the bean validator and audited separately by the standard envelope path.
+- No plaintext or hashed password is ever written to the audit row, a log line, or the response.
 
 ### 4.3 Engine endpoints
 
@@ -560,7 +584,7 @@ The `mockImpl.forEngine(engine)` is a thin per-engine wrapper around the singlet
 - `SYS_ADMIN` can create any role. `ADMIN` can create only `USER` role (attempting `ADMIN` or `SYS_ADMIN` → 403).
 - Request: `{ username, password, roleType, assignedEngineCodes: string[] }`.
 - 201 with `UserResponse`. `@Audited(action = CREATE_USER)`. `details: { newUserId, newUsername, newRole, assignedEngines }`.
-- 400 on validation (e.g., username taken, password too short, invalid role for caller). 409 on unique-constraint violation.
+- 400 on validation (e.g., username taken, password fails the `PasswordStrength` rule in §4.6.1, invalid role for caller). 409 on unique-constraint violation.
 
 **`DELETE /api/users/{id}`** — role-checked
 
@@ -631,7 +655,28 @@ The `mockImpl.forEngine(engine)` is a thin per-engine wrapper around the singlet
   "actorUsername": "admin", "actorRole": "SYS_ADMIN",
   "action": "START_ENGINE", "targetEngineCode": "BPL",
   "details": { "engineCode": "BPL", "exitCode": 0 } }
+
+// ChangePasswordRequest (used by POST /api/auth/change-password)
+{ "currentPassword": "...",
+  "newPassword":     "..." }
+
+// LoginResponse (full shape; used by POST /api/auth/login and POST /api/auth/change-password)
+{ "token": "eyJhbGciOi...", "expiresAt": "2026-09-01T17:02:11Z",
+  "user":  { "id": "uuid", "username": "admin", "role": "SYS_ADMIN", "assignedEngineCodes": [] },
+  "mustChangePassword": false }
 ```
+
+#### 4.6.1 `PasswordStrength` validator
+
+A shared Bean Validation constraint used by both `CreateUserRequest` (admin-typed initial password) and `ChangePasswordRequest.newPassword` (user-typed replacement). The rule:
+
+- Minimum length: **12** characters.
+- Must contain at least one ASCII letter (`[A-Za-z]`) and at least one digit (`[0-9]`).
+- Maximum length: **128** characters (long enough for a passphrase, short enough to keep BCrypt's 72-byte input limit plus headroom).
+- No whitespace-only, no control characters (`\p{Cntrl}`).
+- The constraint's `message` is the string returned in the 422 envelope's `message` field (e.g. `"Password must be at least 12 characters and include a digit"`).
+
+The constraint lives in `…/auth/validation/PasswordStrength.java` and is composed into the request DTOs via `@PasswordStrength`. The server never logs the rejected or accepted value — only the boolean result.
 
 ---
 
@@ -644,6 +689,7 @@ Vite + React 19 + TypeScript 6 + React Router + Tailwind. Shadcn-style primitive
 | Path | Page | Roles |
 |---|---|---|
 | `/login` | `Login.tsx` | public |
+| `/change-password` | `ChangePassword.tsx` | all authenticated (any role, when `mustChangePassword = true`) |
 | `/dashboard` | `Dashboard.tsx` | all authenticated |
 | `/logs` | `Logs.tsx` | all authenticated |
 | `/admin` | `Admin.tsx` (lazy) | `SYS_ADMIN`, `ADMIN` |
@@ -653,7 +699,25 @@ The `Admin` page is **not in the bundle for `USER` role** — it's a lazy import
 
 ### 5.2 Login page
 
-Username + password form. On submit: `POST /api/auth/login` → JWT in response body → store in `localStorage` (or a `SameSite=Strict` non-`httpOnly` cookie) → redirect to `/dashboard`. Error: 401 → inline "Invalid credentials".
+Username + password form. On submit: `POST /api/auth/login` → JWT in response body → store in `localStorage` (or a `SameSite=Strict` non-`httpOnly` cookie) → redirect based on `mustChangePassword`:
+
+- `mustChangePassword = true` → redirect to `/change-password` (and never to `/dashboard`, `/logs`, or `/admin`, even if the URL was deep-linked).
+- `mustChangePassword = false` → redirect to `/dashboard` (or to the `?next=` query param if present and internal).
+
+Error: 401 → inline "Invalid credentials". The error message is identical for unknown username and bad password (no enumeration). See §4.2 for the server contract.
+
+#### 5.2.1 Change Password page (`/change-password`)
+
+Three-field form: `current password`, `new password`, `confirm new password`. On submit:
+
+1. Client-side check: `new` and `confirm` match; show an inline error if not.
+2. `POST /api/auth/change-password` with `{ currentPassword, newPassword }` (no `confirm` field — the server trusts the client-side match).
+3. On 200: store the new JWT, replace `AuthContext.user.mustChangePassword` with `false`, redirect to `/dashboard`.
+4. On 401: inline "Current password is incorrect."
+5. On 422: surface the server's `message` (e.g. "Password must be at least 12 characters and include a digit").
+6. On 400: "Please complete all fields."
+
+While `mustChangePassword = true`, the `/change-password` page is the only authenticated route the user can reach. A direct visit to `/dashboard`, `/logs`, or `/admin` while the flag is set is intercepted by a route guard and redirected back to `/change-password` (defense in depth — the server-side `@PreAuthorize` rules still hold, but the UI prevents the flash of protected content). The guard does not apply after the flag is cleared.
 
 ### 5.3 Engine Dashboard (`/dashboard`)
 
@@ -692,8 +756,10 @@ Username + password form. On submit: `POST /api/auth/login` → JWT in response 
 
 ### 5.7 The `AuthContext` contract
 
-- `{ user, token, login(username, password), logout(), isLoading }`.
-- On mount: read token from storage, call `GET /api/auth/me`, hydrate `user`. On 401, clear and redirect to `/login`.
+- `{ user, token, mustChangePassword, login(username, password), changePassword(current, next), logout(), isLoading }`.
+- `user` is hydrated from `GET /api/auth/me`; `mustChangePassword` is read from the same response (the live `User` row, not the JWT claim). On 401, clear both and redirect to `/login`.
+- `login(username, password)` returns a `{ mustChangePassword: boolean }` result so the caller (the `Login` page) can choose between `/change-password` and `/dashboard` without re-parsing the JWT. See §5.2 for the routing rule.
+- `changePassword(currentPassword, newPassword)` calls `POST /api/auth/change-password`, replaces `token` and `user` with the new ones, and sets `mustChangePassword = false` on success. The caller (`ChangePassword` page) is responsible for the `/dashboard` redirect after the promise resolves.
 - All API calls go through `src/api/client.ts`, a `fetch` wrapper that adds `Authorization: Bearer <token>`, unwraps the error envelope into a thrown `Error(message)`, and handles 401 (clear token, redirect).
 - The token is **never** in a non-`httpOnly` cookie. `localStorage` or a `SameSite=Strict` cookie is acceptable; both are at the XSS-leak level, not the CSRF level.
 
@@ -883,7 +949,7 @@ Missing `JWT_SECRET` or `JASYPT_ENCRYPTOR_PASSWORD` → app fails to start with 
 ## 9. What's deferred from v0.3 (not in this phase)
 
 - Real-time alert notifications (email, Slack) on engine state changes.
-- Password reset / forgot-password flow.
+- Password reset / forgot-password flow. (The *force-change-password-on-first-login* flow is **in scope** in §4.2 / §5.2.1; what is deferred is the unauthenticated recovery flow with email/SMS tokens, account-disable support, and self-service reset links.)
 - User account enable/disable (the `LOGIN_FAIL: USER_DISABLED` audit reason is reserved but the field doesn't exist yet).
 - JWT refresh tokens / token blacklist / forced logout. JWT expiry (8h) is the revocation mechanism for now.
 - Audit log export or external SIEM forwarding.

@@ -155,23 +155,23 @@ Legend:
 | 15.1 | Create `UserRepository extends JpaRepository<User, UUID>` with `findByUsername(String)` and the role-checked query helpers | `…/user/UserRepository.java` | `./gradlew compileJava` green |
 | 15.2 | Create `EngineRepository extends JpaRepository<EngineEntity, UUID>` with `findByCodeAndDeletedAtIsNull(String)` | `…/engine/EngineRepository.java` | `./gradlew compileJava` green |
 | 15.3 | Create `AuditLogRepository extends JpaRepository<AuditLog, UUID>` with the filter-by-actor/engine/date query | `…/audit/AuditLogRepository.java` | `./gradlew compileJava` green |
-| 15.4 | Create `JasyptConfig` with `StringEncryptor` bean reading `JASYPT_ENCRYPTOR_PASSWORD` env var | `…/config/JasyptConfig.java` | App fails to start if the env var is missing |
+| 15.4 🔒 | Create `JasyptConfig` with `StringEncryptor` bean reading `JASYPT_ENCRYPTOR_PASSWORD` env var | `…/config/JasyptConfig.java` | App fails to start if the env var is missing |
 | 15.5 | Create `CorsConfig` (dev origin `http://localhost:5173` with `allowCredentials=true`) and `JacksonConfig` (`JavaTimeModule`, `NON_NULL`) | `…/config/CorsConfig.java`, `…/config/JacksonConfig.java` | App starts, CORS preflight from the dev origin returns the right headers |
-| 15.6 | Create `JwtService` (sign/validate, claims `sub`, `roles`, `mustChangePassword`) | `…/auth/JwtService.java` | `JwtService.sign(username, roles, mustChange)` returns a token that `JwtService.parse` can validate |
-| 15.7 | Create `UserPrincipal` (Spring `UserDetails` wrapping `User`) | `…/auth/UserPrincipal.java` | `UserPrincipal` exposes `getUsername()`, `getPassword()`, `getAuthorities()` from the entity |
+| 15.6 🔒 | Create `JwtService` (sign/validate, claims `sub`, `roles`, `mustChangePassword`) | `…/auth/JwtService.java` | `JwtService.sign(username, roles, mustChange)` returns a token that `JwtService.parse` can validate |
+| 15.7 🔒 | Create `UserPrincipal` (Spring `UserDetails` wrapping `User`) | `…/auth/UserPrincipal.java` | `UserPrincipal` exposes `getUsername()`, `getPassword()`, `getAuthorities()` from the entity |
 | 15.8 🔒 | Create `JwtAuthFilter` that extracts `Authorization: Bearer …` and parses it (parse step only — no security context population yet) | `…/auth/JwtAuthFilter.java` | A request with a valid token reaches the controller; one with a malformed token returns 401 |
 | 15.9 🔒 | Extend `JwtAuthFilter` to populate `SecurityContext` with the `UserPrincipal` (authenticate step) | `…/auth/JwtAuthFilter.java` (same file, second pass) | A request with a valid token has `SecurityContextHolder` populated; `Authentication.getName()` returns the username |
 | 15.10 | Create `SecurityConfig` with the filter chain, JPA `UserDetailsService`, `@EnableMethodSecurity`, role hierarchy | `…/config/SecurityConfig.java` | `POST /api/auth/login` is permit-all; `GET /api/auth/me` requires authentication; `GET /api/engines` requires authentication |
 | 15.11 | Create `AuthController` with `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me` | `…/auth/AuthController.java` | `curl -X POST /api/auth/login -d '{...}'` returns a JWT and a `mustChangePassword` field |
-| 15.12 | Create `POST /api/auth/change-password` endpoint per SPEC §4.2 (the #14a endpoint, implemented here) | `…/auth/AuthController.java` (one new method) | `curl -X POST /api/auth/change-password -d '{currentPassword, newPassword}'` with the right JWT returns a new JWT with `mustChangePassword=false` |
-| 15.13 | Create `AuthenticationSuccessListener` and `AuthenticationFailureListener` for `LOGIN_SUCCESS` / `LOGIN_FAIL` audit rows | `…/audit/AuthenticationSuccessListener.java`, `…/audit/AuthenticationFailureListener.java` | A successful login writes a `LOGIN_SUCCESS` row; a failed login writes a `LOGIN_FAIL` row with `reason: "BAD_CREDENTIALS"` and the attempted username |
+| 15.12 🔒 | Create `POST /api/auth/change-password` endpoint per SPEC §4.2 (the #14a endpoint, implemented here) | `…/auth/AuthController.java` (one new method) | `curl -X POST /api/auth/change-password -d '{currentPassword, newPassword}'` with the right JWT returns a new JWT with `mustChangePassword=false` |
+| 15.13 🔒 | Create `AuthenticationSuccessListener` and `AuthenticationFailureListener` for `LOGIN_SUCCESS` / `LOGIN_FAIL` audit rows | `…/audit/AuthenticationSuccessListener.java`, `…/audit/AuthenticationFailureListener.java` | A successful login writes a `LOGIN_SUCCESS` row; a failed login writes a `LOGIN_FAIL` row with `reason: "BAD_CREDENTIALS"` and the attempted username |
 | 15.14 | Add `V2__seed_admin.sql` (dev profile only) with one SYS_ADMIN (`mustChangePassword=true`, BCrypt-hashed password) | `db/seed/V2__seed_admin.sql` (new file, dev profile only) | `application-dev.properties` activates the seed location; running bootRun creates the admin row |
 | 15.15 | Write a `@SpringBootTest` smoke that boots the context, logs in as the seeded admin, and calls `GET /api/auth/me` | `…/src/test/…/AuthSmokeTest.java` | `./gradlew test` is green; the smoke passes |
 
 **Review notes:**
 
 - 15 subtasks, ~14 files. The biggest task in the build.
-- 🔒 subtasks: 15.8 (parse only), 15.9 (authenticate — populates `SecurityContext`), and 15.4 (encryption key source) and 15.6/15.7 (JWT signing) are the auth/RBAC seams per the skill.
+- 🔒 subtasks (7): 15.4 (Jasypt master-password source — credential in env), 15.6 (JWT signing key + claim with `mustChangePassword` — token + credential), 15.7 (`UserPrincipal` exposes the entity's `passwordHash` via `getPassword()` — credential-adjacent principal), 15.8 (parse only), 15.9 (authenticate — populates `SecurityContext`), 15.12 (the change-password endpoint — credential mutation), 15.13 (login audit rows containing usernames and failure reasons — audit-row writer).
 - 15.8 and 15.9 are intentionally split per the skill's anti-pattern: *"Bundling the filter chain's parse step with its authenticate step. This pair is the single highest-leverage bug in a JWT filter — always two subtasks."*
 - 15.14 lives in `db/seed/` and is gated by the dev profile so it never lands in prod.
 
@@ -190,7 +190,7 @@ Legend:
 | 16.2 | Create `@Audited` annotation (`action`, `targetEngineFromPath`, `details` SpEL) | `…/audit/Audited.java` | The annotation compiles and is usable on a method |
 | 16.3 🔒 | Create `AuditAspect` (AOP): extract actor from `SecurityContext`, resolve target engine from path, write row on success AND on exception | `…/audit/AuditAspect.java` | A `@Audited` controller method produces exactly one `AuditLog` row per call (success or failure) |
 | 16.4 | Create DTOs: `CreateUserRequest`, `UpdateUserRolesRequest`, `UserResponse` with validation annotations | `…/user/dto/*.java` (three files) | Validation rejects missing/blank fields; `UserResponse` does not include `passwordHash` |
-| 16.5 | Create `UserService` (BCrypt hash, set `mustChangePassword = true` on create, prevent last-SYS_ADMIN delete, prevent self-delete) | `…/user/UserService.java` | All invariants from the parent task hold (see #16 notes) |
+| 16.5 | Create `UserService` (BCrypt hash, set `mustChangePassword = true` on create, prevent last-SYS_ADMIN delete, prevent self-delete) | `…/user/UserService.java` | The integration test in 16.10 verifies four curl-level checks: `curl -X DELETE /api/users/{selfId}` as a SYS_ADMIN returns 400; `curl -X DELETE /api/users/{id}` where the target is the only remaining SYS_ADMIN returns 400; `curl -X POST /api/users -d '{"username":"u","password":"...","roleType":"USER"}'` writes a row with `passwordHash` starting `$2a$10$` and `mustChangePassword=true`; `curl -X POST /api/users -d '{"username":"u","password":"plain"}'` rejects passwords shorter than the rule |
 | 16.6 | Create `UserController` `GET /api/users` (SYS_ADMIN + ADMIN) | `…/user/UserController.java` (one method) | `curl` as SYS_ADMIN returns all users; as ADMIN returns all users; as USER returns 403 |
 | 16.7 🔒 | Create `UserController` `POST /api/users` with the role-checked rule (ADMIN can only create USER; SYS_ADMIN can create any) | `…/user/UserController.java` (one method) | `curl` as ADMIN with `roleType=ADMIN` returns 403; as ADMIN with `roleType=USER` returns 201 |
 | 16.8 | Create `UserController` `DELETE /api/users/{id}` with the self-delete and last-SYS_ADMIN guards | `…/user/UserController.java` (one method) | `curl` as a SYS_ADMIN trying to delete themselves returns 400; trying to delete the last SYS_ADMIN returns 400 |
@@ -267,7 +267,8 @@ Legend:
 |---|---|---|---|
 | 19.1 🔒 | Create `SshClientProvider`: per-engine cached `SshClient`, idle-evicted at 5 min via a `ScheduledExecutorService`, closed in `@PreDestroy` | `SshClientProvider.java` | Two calls to the same engine within 5 min reuse one `SshClient`; a third call after 6 min opens a new one |
 | 19.2 🔒 | Create `SshBackedEngine.status()` with the 5s connect + 5s op timeouts; throws `EngineUnreachableException` on connect fail (with one retry) | `SshBackedEngine.java` (one method) | A `status()` against a reachable host returns `RUNNING`/`STOPPED`; against an unreachable host throws within 5s, then retries once |
-| 19.3 🔒 | Create `SshBackedEngine.start()` and `stop()` with the 30s bound via `Future.get(30, SECONDS)`; throws `EngineScriptException(exitCode, stderr)` on non-zero exit | `SshBackedEngine.java` (two methods) | A 60s-hanging script is cancelled at 30s and returns 504; a script that exits 127 returns 502 with the stderr in `details` |
+| 19.3a 🔒 | Create `SshBackedEngine.start()` with the 30s bound via `Future.get(30, SECONDS)`; throws `EngineScriptException(exitCode, stderr)` on non-zero exit | `SshBackedEngine.java` (one method) | A 60s-hanging start script is cancelled at 30s and returns 504; a start script that exits 127 returns 502 with the stderr in `details` |
+| 19.3b 🔒 | Create `SshBackedEngine.stop()` with the same 30s bound; mirror of start for the running → stopped transition | `SshBackedEngine.java` (one method) | A 60s-hanging stop script is cancelled at 30s and returns 504; a stop script that exits 127 returns 502 with the stderr in `details` |
 | 19.4 | Create `SshBackedEngine.getLogs(int)` with the 10s bound; returns the last N lines via a single `tail -n N` invocation | `SshBackedEngine.java` (one method) | A request for 100 lines returns 100 lines within 10s on a normal host |
 | 19.5 🔒 | Create `LogBuffer`: per-engine `ArrayDeque<LogLine>`, cap 500, oldest evicted on insert | `LogBuffer.java` | Inserting a 501st line evicts the oldest; the buffer is per-engine (two engines don't share) |
 | 19.6 | Create the SSH channel reader loop (one method) that reads a `ChannelExec` stdout line-by-line and pushes to the buffer | `SshBackedEngine.java` (one method) | A `tail -F` channel's lines appear in the buffer in real time |
@@ -276,8 +277,8 @@ Legend:
 
 **Review notes:**
 
-- 8 subtasks, 4 files. `SshBackedEngine.java` is the big one — 4 methods land in it.
-- 🔒 count is high (5/8) because every SSH call touches credentials and execution: `SshClientProvider` (credential injection), `status`/`start`/`stop` (SSH execution with the 3 error categories), `LogBuffer` (sensitive output), `LogTailerRegistry` (lifecycle of the credentialed thread).
+- 9 subtasks, 4 files. `SshBackedEngine.java` is the big one — 5 methods land in it.
+- 🔒 count is high (6/9) because every SSH call touches credentials and execution: `SshClientProvider` (credential injection), `status`/`start`/`stop` (SSH execution with the 3 error categories — split into 19.2, 19.3a, 19.3b to match the per-verb rule and to let start and stop be reviewed independently — the failure modes for a hanging start script and a hanging stop script differ in how the `LogTailerRegistry` reacts), `LogBuffer` (sensitive output), `LogTailerRegistry` (lifecycle of the credentialed thread).
 - 19.6 is *not* 🔒 because it's the data pump — it reads a channel and pushes bytes; no credential or RBAC decision lives here.
 
 ---
@@ -344,9 +345,9 @@ Legend:
 | 22.4 | `./gradlew test` clean (all backend test classes from #15–#21) | (no file) | All tests pass |
 | 22.5 | `./gradlew bootRun` starts; verify `GET /actuator/health` is `UP` | (no file) | `curl /actuator/health` returns `{"status":"UP"}` |
 | 22.6 | Curl as SYS_ADMIN: every endpoint returns the expected 2xx; verify `@Audited` writes one `AuditLog` row per state change | (no file) | The `audit_log` table has the expected rows after the curl session |
-| 22.7 | Curl as ADMIN: full audit access; can create only USER-role users; cannot delete another ADMIN | (no file) | The RBAC matrix from SPEC §3.1 holds |
-| 22.8 | Curl as USER: 403 on `/api/audit-logs` (per #11); empty engine list if no assignments; only assigned engines visible | (no file) | The USER RBAC contract holds |
-| 22.9 | WebSocket handshake with a USER JWT for an assigned engine returns 200 + initial snapshot; for an unassigned engine returns 403 | (no file) | The WS RBAC contract holds |
+| 22.7 | Curl as ADMIN: full audit access; can create only USER-role users; cannot delete another ADMIN | (no file) | `curl -H "Authorization: Bearer $ADMIN_JWT" /api/audit-logs` returns 200 with rows; `curl -X POST -H "Authorization: Bearer $ADMIN_JWT" /api/users -d '{"roleType":"ADMIN",...}'` returns 403; `curl -X DELETE -H "Authorization: Bearer $ADMIN_JWT" /api/users/{adminTargetId}` returns 403; `curl -X POST -H "Authorization: Bearer $ADMIN_JWT" /api/users -d '{"roleType":"USER",...}'` returns 201 |
+| 22.8 | Curl as USER: 403 on `/api/audit-logs` (per #11); empty engine list if no assignments; only assigned engines visible | (no file) | `curl -H "Authorization: Bearer $USER_JWT" /api/audit-logs` returns 403; with no assignments, `curl -H "Authorization: Bearer $USER_JWT" /api/engines` returns `[]`; with one assignment, the same call returns exactly that one engine row |
+| 22.9 | WebSocket handshake with a USER JWT for an assigned engine returns 200 + initial snapshot; for an unassigned engine returns 403 | (no file) | `wscat -c "ws://localhost:8080/ws/logs/{assignedCode}" -H "Authorization: Bearer $USER_JWT"` (header-based auth per SPEC §4.3) accepts and delivers a snapshot JSON frame; the same handshake against an unassigned engine code returns 403 |
 | 22.10 | `qa-reviewer` pass on the full backend diff (#14–#21) | (no file) | qa-reviewer reports no `blocker` findings |
 
 **Review notes:**
@@ -532,11 +533,11 @@ Legend:
 | #14a | 6 | 1 |
 | #14 | 8 | 0 |
 | #14b | 3 | 1 |
-| #15 | 15 | 6 |
+| #15 | 15 | 7 |
 | #16 | 10 | 3 |
 | #17 | 9 | 0 |
 | #18 | 7 | 3 |
-| #19 | 8 | 5 |
+| #19 | 9 | 6 |
 | #20 | 8 | 2 |
 | #21 | 4 | 2 |
 | #22 | 10 | 0 |
@@ -547,7 +548,7 @@ Legend:
 | #26 | 7 | 1 |
 | #27 | 9 | 1 |
 | #28 | 7 | 0 |
-| **Total** | **146** | **32** |
+| **Total** | **147** | **34** |
 
 The `task-decomposition` skill is in `.claude/skills/task-decomposition/SKILL.md`; the agent loaders know to use it. Every TASKS.md task has a subtask table here. Each subtask has a `done when` that's paste-able into a terminal or test file.
 
