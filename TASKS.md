@@ -3,6 +3,8 @@
 Source: SPEC.md (v0.3), instruction.md, rbac-redesign-spec.md.
 **This file is the source of truth for the build. Any change to the task list is recorded here first.**
 
+> **Per-task subtask tables live in [TASKS-decomposed.md](TASKS-decomposed.md).** Every TASKS.md task is decomposed via the [`task-decomposition`](.claude/skills/task-decomposition/SKILL.md) skill before any code is written. The subagent produces the table in `TASKS-decomposed.md` for the orchestrator's review, then executes the subtasks one at a time and reports when the whole task is done.
+
 Legend: 📄 = doc-only, ⚙️ = backend, 🎨 = frontend, ✅ = verification.
 Run in order. Each task is a checkpoint; review between any two.
 
@@ -41,6 +43,8 @@ Before any code, three doc edits must land:
 - **#13** — rbac-redesign-spec.md becomes a "what was decided and why" doc, with each of the sketch's 6 open questions answered against v0.3.
 
 **Why these come first:** the spec must be locked before the agents run. If #11 is open while #14 is in flight, the agents can't tell which contract to implement.
+
+Each of #11, #12, #13 has a subtask table in [TASKS-decomposed.md](TASKS-decomposed.md) produced by the `task-decomposition` skill.
 
 ## New tasks from the Sept 1 conversation
 
@@ -317,3 +321,4 @@ Add a check: `GET /api/audit-logs` with USER role must return 403. The query mus
 
 - **Sept 1, 2026** — first version of this file. 18 tasks. Added #14a, #14b, #24a for the force-change-password flow that emerged from the Sept 1 walkthrough.
 - **Sept 1, 2026** — added the "Pending doc edits" preamble and the "Change log" section to make the file the source of truth for task-list changes.
+- **Sept 1, 2026** — `task-decomposition.md` moved from repo root to `.claude/skills/task-decomposition/SKILL.md` so the agent loader picks it up by its `name` field. `backend-agent.md` and `frontend-agent.md` updated to load it before any task. `qa-reviewer.md` updated to cross-check implementations against planned subtasks. New file `TASKS-decomposed.md` holds the per-task subtask tables. Worked example for task #11 added.

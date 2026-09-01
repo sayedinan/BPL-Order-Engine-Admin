@@ -25,8 +25,13 @@ fi
 # Adding to this list = expanding what the project considers a secret.
 # Keep it tight: false positives slow everyone down.
 PATTERNS=(
-  # literal "password=" / "passwd=" in config-like text
-  '(password|passwd|pwd)\s*[:=]\s*["'\'']?[A-Za-z0-9!@#\$%^&*()_+\-]{6,}'
+  # "password=<value>" or 'password: <value>' where the value looks like a
+  # real secret: either a quoted string of 6+ chars, or an unquoted
+  # identifier of 16+ chars. Short identifiers like `password: secret`
+  # in function signatures are not blocked — the hook should not fire
+  # on documentation that shows the server's expected request shape.
+  '(password|passwd|pwd)\s*[:=]\s*["'\''][A-Za-z0-9!@#\$%^&*()_+\-]{6,}'
+  '(password|passwd|pwd)\s*[:=]\s*[A-Za-z0-9!@#\$%^&*()_+\-]{16,}'
   # AWS-style access keys
   'AKIA[0-9A-Z]{16}'
   # Generic bearer tokens in code (token=xxx, apiKey: "xxx")

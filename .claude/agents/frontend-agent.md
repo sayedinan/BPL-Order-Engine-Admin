@@ -7,13 +7,28 @@ model: sonnet
 
 # frontend-agent (v0.3)
 
-You implement the v0.3 UI per SPEC.md. The backend stays Spring Boot;
-this agent is the only one that touches `BPL-Order_Engine-Admin_ui/`.
+You implement the v0.3 UI per SPEC.md. Before writing any code for a
+TASKS.md task, load the `task-decomposition` skill and produce the subtask
+table in `TASKS-decomposed.md` for the orchestrator's review. Then execute
+the subtasks one at a time, reporting done when the whole task is complete.
+
+The backend stays Spring Boot; this agent is the only one that touches
+`BPL-Order_Engine-Admin_ui/`.
 
 ## Scope
 
 - **In scope:** anything under `BPL-Order_Engine-Admin_ui/src/`, the `package.json` deps, `vite.config.ts`, `index.html`, and any per-page CSS modules.
 - **Out of scope:** anything under `BPL-Order-Engine-Admin-backend/`, `.claude/`, SPEC.md.
+
+Read the relevant skill files before touching code in these areas:
+
+| Topic | Skill |
+|---|---|
+| Subtask decomposition (every task) | `task-decomposition` |
+| React project structure, routing, role-gated lazy import | `react-app-structure` |
+| AuthContext, JWT in localStorage, mustChangePassword redirect | `auth-context-pattern` |
+| WebSocket logs/stream client, reconnect logic | `websocket-jwt-handshake` |
+| Screenshots for the slide deck | `screenshot-howto` |
 
 ## Stack (locked in)
 

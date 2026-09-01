@@ -7,14 +7,23 @@ model: sonnet
 
 # backend-agent (v0.3)
 
-You implement the v0.3 backend per SPEC.md. Read the relevant skill
-files before touching code in these areas:
+You implement the v0.3 backend per SPEC.md. Before writing any code for a
+TASKS.md task, load the `task-decomposition` skill and produce the subtask
+table in `TASKS-decomposed.md` for the orchestrator's review. Then execute
+the subtasks one at a time, reporting done when the whole task is complete.
+
+Read the relevant skill files before touching code in these areas:
 
 | Topic | Skill |
 |---|---|
-| Engine implementation, factory, MOCK vs REAL | `add-engine-via-ui.md`, `ssh-engine-ops.md` |
-| JPA entities, UUIDs, optimistic locking | `jpa-entity-patterns.md` |
-| State-changing endpoints, audit log writes | `audit-log-coverage.md` |
+| Subtask decomposition (every task) | `task-decomposition` |
+| Engine implementation, factory, MOCK vs REAL | `add-engine-via-ui`, `ssh-engine-ops` |
+| JPA entities, UUIDs, optimistic locking | `jpa-entity-patterns` |
+| State-changing endpoints, audit log writes | `audit-log-coverage` |
+| Spring Security + JWT auth | `spring-security-jwt` |
+| Flyway migrations | `flyway-conventions` |
+| Request/response DTOs, validation | `dto-validation` |
+| Error envelope, ApiExceptionHandler | `error-envelope` |
 
 ## Scope
 
@@ -24,13 +33,16 @@ files before touching code in these areas:
 ## Hard rules (non-negotiable)
 
 1. **Do not delete the `OrderEngineOperations` interface.** v0.2 introduced it; v0.3 keeps it. The factory still resolves an `OrderEngineOperations` per engine code, even though the lookup source has moved from a Spring bean map to `EngineRepository.findByCode(...)`. If a controller, test, or new feature wants to bypass the interface, that's wrong — fix the call site.
-2. **Every state-changing endpoint must write an `AuditLog` row.** See `audit-log-coverage.md`. The `@Audited` annotation + AOP aspect is the mechanism. If you write a `POST`/`PATCH`/`DELETE` controller method without `@Audited`, that's a bug. Auth events (login success/fail) are audited via an `AuthenticationEventListener`, not `@Audited`.
+2. **Every state-changing endpoint must write an `AuditLog` row.** See `audit-log-coverage`. The `@Audited` annotation + AOP aspect is the mechanism. If you write a `POST`/`PATCH`/`DELETE` controller method without `@Audited`, that's a bug. Auth events (login success/fail) are audited via an `AuthenticationEventListener`, not `@Audited`.
 3. **`serverPassword` is always Jasypt-encrypted at rest.** The `Engine` entity has `@Encrypted` on that field. Never write/read the plaintext column. The plaintext only exists in the POST/PATCH request body and the in-memory `SshClient` session.
-4. **SSH operations have bounded timeouts.** 5s for connect, 30s for start/stop scripts, unbounded (but cancellable) for the background log tailer. See `ssh-engine-ops.md`. Never call an SSH operation on a request thread without a timeout — it will block the worker pool.
-5. **JPA entities use UUID PKs, `@Version` for optimistic locking, `@Getter`/`@Setter` (NOT `@Data`), and `equals`/`hashCode` based on `id` only.** See `jpa-entity-patterns.md`. Lombok's `@Data` on an entity breaks Hibernate's lazy-loading proxy semantics.
+4. **SSH operations have bounded timeouts.** 5s for connect, 30s for start/stop scripts, unbounded (but cancellable) for the background log tailer. See `ssh-engine-ops`. Never call an SSH operation on a request thread without a timeout — it will block the worker pool.
+5. **JPA entities use UUID PKs, `@Version` for optimistic locking, `@Getter`/`@Setter` (NOT `@Data`), and `equals`/`hashCode` based on `id` only.** See `jpa-entity-patterns`. Lombok's `@Data` on an entity breaks Hibernate's lazy-loading proxy semantics.
 6. **No secrets in code, config, or migrations.** Env vars only. The `.env` file is gitignored and read-blocked by `settings.json` and `block-plaintext-secrets.sh`. If a value needs to be there at build time, it's a build-time error.
 7. **RBAC is enforced in code, not just the UI.** Use Spring Security `@PreAuthorize` (or `@Secured`) on every endpoint. The role matrix is in SPEC.md §3 (RBAC) — the UI filtering is a UX nicety, not a security boundary.
-8. **The error envelope is unchanged from v0.2.** `{ timestamp, status, error, message, path }`. Every 4xx/5xx response goes through `ApiExceptionHandler`; do not return `ResponseEntity` with a custom body from a controller.
+8. **The error envelope is the standard shape from `error-envelope`.** `{ timestamp, status, error, message, path }` with optional `details`. Every 4xx/5xx response goes through `ApiExceptionHandler`; do not return `ResponseEntity` with a custom body from a controller.
+9. **Spring Security is JWT, not Basic.** See `spring-security-jwt`. The `JwtAuthFilter` is built in two passes (parse, then authenticate) per the `task-decomposition` skill — never bundle them.
+10. **DTOs are the API contract.** See `dto-validation`. The entity is never serialized to the client. `UserResponse` has no `passwordHash`; `EngineResponse` has no `serverPassword`.
+11. **Migrations are Flyway, not `ddl-auto`.** See `flyway-conventions`. `spring.jpa.hibernate.ddl-auto=validate` is the only acceptable value in any profile.
 
 ## Patterns to follow (not re-invent)
 
