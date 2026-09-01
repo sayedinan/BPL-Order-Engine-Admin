@@ -182,8 +182,15 @@ route('POST', /^\/api\/auth\/change-password$/, (req) => {
   if (!u) {
     return err(401, 'Current password is incorrect', req.path);
   }
-  // Mock: convention `<username>123`.
-  if (body.currentPassword !== `${u.username}123`) {
+  // Mock: verify against the override (set by a prior change-password
+  // in this session) or fall back to the seed convention. The override
+  // has to win — otherwise the second change-password in a session
+  // rejects the current password even though it was just set.
+  const currentMatches =
+    u.passwordOverride !== undefined
+      ? body.currentPassword === u.passwordOverride
+      : body.currentPassword === `${u.username}123`;
+  if (!currentMatches) {
     appendAudit({
       actorUsername: u.username,
       actorRole: u.role,
@@ -202,6 +209,9 @@ route('POST', /^\/api\/auth\/change-password$/, (req) => {
     );
   }
   u.mustChangePassword = false;
+  // Persist the new password for subsequent logins in this session
+  // (mirrors the backend's save+login flow). Stays in memory only.
+  u.passwordOverride = body.newPassword;
   u.updatedAt = new Date().toISOString();
   appendAudit({
     actorUsername: u.username,
@@ -636,7 +646,9 @@ export async function handleMockRequest(input: Request): Promise<Response> {
   };
   for (const h of handlers) {
     if (h.method !== req.method) continue;
-    const m = req.path.match(h.pattern);
+    // Strip the query string before matching — every route regex is
+    // anchored with `$` and would otherwise miss anything with `?...`.
+    const m = req.path.split('?')[0].match(h.pattern);
     if (m) {
       // Re-derive path with first match group substituted in for nested
       // routes (e.g. /api/engines/BPL/start -> code=BPL). For the mock

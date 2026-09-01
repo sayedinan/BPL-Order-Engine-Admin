@@ -43,7 +43,7 @@ export function AuditLogsTable({
     return (
       <div className="empty-state">
         <div className="empty-state__title">No audit log rows</div>
-        <div>Try changing the filters above.</div>
+        <div>The audit log is empty so far.</div>
       </div>
     );
   }

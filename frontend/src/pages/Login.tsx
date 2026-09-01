@@ -12,6 +12,7 @@
 import { useState, type FormEvent } from 'react';
 import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
+import { isMockMode } from '../api/client';
 
 interface LocationState {
   from?: string;
@@ -126,6 +127,14 @@ export function Login() {
           (Mock mode: any seed user accepts password{' '}
           <code>&lt;username&gt;123</code>.)
         </p>
+
+        {isMockMode() && (
+          <div className="login-card__hint" role="note" style={{ marginTop: 12, color: 'var(--color-warning, #c08400)' }}>
+            Mock mode: state is held in memory and resets on every
+            page refresh. Passwords you set via &ldquo;Change
+            password&rdquo; will not survive a refresh.
+          </div>
+        )}
       </form>
     </div>
   );

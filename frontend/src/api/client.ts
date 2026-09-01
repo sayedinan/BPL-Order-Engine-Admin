@@ -42,6 +42,13 @@ const BASE = USE_MOCK
   ? 'http://mock'
   : (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:8080';
 
+/** True when the app is intercepting requests with the in-browser mock
+ *  instead of calling the real backend. Exported so UI surfaces
+ *  (banners, hints) can show mock-specific guidance. */
+export function isMockMode(): boolean {
+  return USE_MOCK;
+}
+
 if (USE_MOCK) {
   // Single line on app boot — handy when verifying which mode is active.
   console.info(

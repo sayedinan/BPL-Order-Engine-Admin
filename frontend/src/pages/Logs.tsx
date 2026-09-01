@@ -1,18 +1,16 @@
 /**
  * Logs page.
  *
- * Two filter dropdowns:
- *   - Source: "System Audit Logs" (default, hidden for USER) | "Engine
- *     Execution Logs" (always available).
- *   - Engine: the list of visible engines; only relevant when Source
- *     is "Engine Execution Logs".
+ * Two view modes (Source dropdown):
+ *   - "System Audit Logs" (default, hidden for USER) — every audit
+ *     row, paginated, newest first. No filters: each row already
+ *     shows who, what, which engine, when, and details. Filtering by
+ *     actor/action/engine in the UI added noise without value.
+ *   - "Engine Execution Logs" (always available) — pick one engine
+ *     from the visible list, see its log lines live.
  *
- * Audit logs: GET /api/audit-logs with the filter query params,
- * paginated. The `from`/`to` are ISO strings; `actor` and `action`
- * are free-form text. URL query params reflect the active filters.
- *
- * Engine execution logs: an initial GET /api/engines/{code}/logs?limit=100
- * snapshot, then a WS stream merged in by useEngineLogsSocket.
+ * The URL stores `source` and `engine` (so the back button works and
+ * the engine source is shareable) plus `page` for the audit log.
  */
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -36,12 +34,8 @@ export function Logs() {
   // Defense in depth: even if the URL says audit, USER can't see audit.
   const effectiveSource: Source = isUser ? 'engine' : source;
   const engineFromUrl = searchParams.get('engine') ?? '';
-  const actor = searchParams.get('actor') ?? '';
-  const action = searchParams.get('action') ?? '';
-  const from = searchParams.get('from') ?? '';
-  const to = searchParams.get('to') ?? '';
   const page = Math.max(0, Number(searchParams.get('page') ?? '0'));
-  const size = Math.min(200, Math.max(1, Number(searchParams.get('size') ?? '50')));
+  const size = 50;
 
   // Fetch the visible engines so the Engine dropdown is populated.
   useEffect(() => {
@@ -137,65 +131,10 @@ export function Logs() {
             </select>
           </label>
         )}
-
-        {effectiveSource === 'audit' && !isUser && (
-          <>
-            <label className="filter-bar__group">
-              Actor:
-              <input
-                type="text"
-                value={actor}
-                onChange={(e) => setParam('actor', e.target.value)}
-                placeholder="username"
-                style={{ width: 120 }}
-              />
-            </label>
-            <label className="filter-bar__group">
-              Action:
-              <input
-                type="text"
-                value={action}
-                onChange={(e) => setParam('action', e.target.value)}
-                placeholder="e.g. START_ENGINE"
-                style={{ width: 140 }}
-              />
-            </label>
-            <label className="filter-bar__group">
-              Engine:
-              <input
-                type="text"
-                value={engineFromUrl}
-                onChange={(e) => setParam('engine', e.target.value)}
-                placeholder="BPL"
-                style={{ width: 80 }}
-              />
-            </label>
-            <label className="filter-bar__group">
-              From:
-              <input
-                type="datetime-local"
-                value={from}
-                onChange={(e) => setParam('from', e.target.value)}
-              />
-            </label>
-            <label className="filter-bar__group">
-              To:
-              <input
-                type="datetime-local"
-                value={to}
-                onChange={(e) => setParam('to', e.target.value)}
-              />
-            </label>
-          </>
-        )}
       </div>
 
       {effectiveSource === 'audit' && !isUser && (
         <AuditLogsView
-          actor={actor}
-          engine={engineFromUrl}
-          from={from}
-          to={to}
           page={page}
           size={size}
           onPageChange={(p) => setParam('page', String(p))}
@@ -223,24 +162,12 @@ export function Logs() {
 // ---- Sub-views (kept inline; they own their own loading state) ----
 
 interface AuditLogsViewProps {
-  actor: string;
-  engine: string;
-  from: string;
-  to: string;
   page: number;
   size: number;
   onPageChange: (page: number) => void;
 }
 
-function AuditLogsView({
-  actor,
-  engine,
-  from,
-  to,
-  page,
-  size,
-  onPageChange,
-}: AuditLogsViewProps) {
+function AuditLogsView({ page, size, onPageChange }: AuditLogsViewProps) {
   const [rows, setRows] = useState<AuditLogResponse[]>([]);
   const [total, setTotal] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -249,17 +176,10 @@ function AuditLogsView({
   useEffect(() => {
     let cancelled = false;
     // Don't set loading=true here (lint rule). The initial state is
-    // already true; on subsequent filter changes we keep the previous
-    // rows visible until the new ones arrive.
+    // already true; on page change we keep the previous rows visible
+    // until the new ones arrive.
     auditApi
-      .list({
-        actor: actor || undefined,
-        engine: engine || undefined,
-        from: from ? new Date(from).toISOString() : undefined,
-        to: to ? new Date(to).toISOString() : undefined,
-        page,
-        size,
-      })
+      .list({ page, size })
       .then((res) => {
         if (cancelled) return;
         setRows(res.items);
@@ -275,7 +195,7 @@ function AuditLogsView({
     return () => {
       cancelled = true;
     };
-  }, [actor, engine, from, to, page, size]);
+  }, [page, size]);
 
   if (error) {
     return (

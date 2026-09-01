@@ -35,6 +35,13 @@ interface MockUser {
   role: Role;
   assignedEngineCodes: string[];
   mustChangePassword: boolean;
+  /**
+   * Optional override of the seed password. Set when the user calls
+   * /api/auth/change-password. checkCredentials consults this first,
+   * then falls back to the `<username>123` seed convention. Never
+   * written to a seed — runtime only, lives in the in-memory store.
+   */
+  passwordOverride?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -237,12 +244,17 @@ export function toEngineResponse(e: MockEngine): EngineResponse {
 }
 
 /**
- * Validate credentials in the mock. Accepts the convention
- * `<username>123` for every seed user.
+ * Validate credentials in the mock. Seed users accept the convention
+ * `<username>123`; after a successful /api/auth/change-password, the
+ * newly chosen password is stored on the user as `passwordOverride`
+ * and wins on the next login.
  */
 export function checkCredentials(username: string, candidate: string): MockUser | null {
   const u = store.users.find((x) => x.username === username);
   if (!u) return null;
+  if (u.passwordOverride !== undefined) {
+    return candidate === u.passwordOverride ? u : null;
+  }
   // Convention: password is username + "123". Never stored literally.
   const expected = `${username}123`;
   return candidate === expected ? u : null;
