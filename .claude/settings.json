@@ -32,7 +32,10 @@
       "Bash(python append_log.py \"2.5\" \"2.5.3\" \"Manual smoke: ADMIN sees Admin Panel; Engines tab is read-only \\(no Edit SSH/Delete\\); role select excludes ADMIN/SYS_ADMIN in UserForm\" \"frontend/src/pages/Admin.tsx\")",
       "Bash(python append_log.py \"2.5\" \"2.5.4\" \"Bundle check: USER bundle \\(index-*.js\\) does NOT contain UserForm \\(verified via grep\\); Admin chunk \\(Admin-*.js, 10.5kB lazy\\) only loads when route is visited\" \"frontend/dist/assets/\")",
       "Bash(python append_log.py \"2.5\" \"2.5.5\" \"Phase 2 complete: 16 subtasks landed; full v0.3 frontend demoable against mock; ready to wire real backend or add screenshots\" \"SUBTASKS log.docx\")",
-      "Bash(python append_log.py \"API\" \"API.1\" \"Write API.md: canonical v0.3 backend implementation contract \\(17 REST + 1 WS; matches SPEC §4 and frontend types\\)\" \"API.md\")"
+      "Bash(python append_log.py \"API\" \"API.1\" \"Write API.md: canonical v0.3 backend implementation contract \\(17 REST + 1 WS; matches SPEC §4 and frontend types\\)\" \"API.md\")",
+      "Bash(python append_log.py \"19\" \"19.5\" \"Create LogBuffer: per-engine deque, cap 500, oldest evicted on insert, thread-safe\" \"backend/src/main/java/com/BPL_Order_Engine_Admin/manager/engine/LogBuffer.java\")",
+      "Bash(python append_log.py \"19\" \"19.6\" \"SSH channel reader loop: tailer uses SshClient + createExecChannel + stream loop; line-by-line push to LogBuffer\" \"backend/src/main/java/com/BPL_Order_Engine_Admin/manager/engine/LogTailerRegistry.java\")",
+      "Bash(python append_log.py \"19\" \"19.7\" \"LogTailerRegistry: one tailer per RUNNING REAL engine; exp backoff reconnect capped 60s; 5 consecutive failures = give up\" \"backend/src/main/java/com/BPL_Order_Engine_Admin/manager/engine/LogTailerRegistry.java\")"
     ],
     "deny": [
       "Read(./.env)",
