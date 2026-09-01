@@ -1,0 +1,25 @@
+# v0.3 frontend — production environment defaults.
+#
+# These are Vite build-time variables (not secrets). At deploy time
+# the operator must set VITE_API_BASE_URL to the public URL where
+# the reverse proxy serves the app, e.g. via the build arg in
+# docker-compose.prod.yml.
+#
+# VITE_USE_MOCK=false ensures the production bundle talks to the
+# real backend, never the in-browser mock.
+#
+# File naming: this file is committed for documentation. Vite also
+# reads `.env.production` at build time if present. To keep secrets
+# out of git, the operator should pass these as `--build-arg` to
+# `docker build` (or via Compose), not as a committed .env file.
+#
+# Recommended at deploy time:
+#   docker build \
+#     --build-arg VITE_API_BASE_URL=https://bpl-admin.example.com \
+#     --build-arg VITE_USE_MOCK=false \
+#     -t bpl-frontend:prod ./frontend
+#
+# Or in docker-compose.prod.yml under the frontend `build.args`.
+
+VITE_USE_MOCK=false
+VITE_API_BASE_URL=http://localhost:8080

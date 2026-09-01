@@ -1,0 +1,92 @@
+# v0.3 production stack.
+#
+# Brings up: Postgres + backend + frontend (static SPA) + Caddy
+# (TLS reverse proxy). The dev compose file at ./docker-compose.yml
+# is for run.bat; this file is for the single-VM production deploy.
+#
+# Usage (see RUNBOOK.md for the full step-by-step):
+#   cp dev-secrets.template .env.local
+#   # edit .env.local — set every change-me with `openssl rand -base64 48`
+#   # set SPRING_PROFILES_ACTIVE=prod
+#   # set CORS_ALLOWED_ORIGINS to the public hostname
+#   docker compose -f docker-compose.prod.yml --env-file .env.local \
+#     up -d --build
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: bpl-postgres-prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - bpl-pgdata-prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # Not published — only the backend container talks to it.
+
+  backend:
+    build:
+      context: ./backend
+    image: bpl-backend:prod
+    container_name: bpl-backend-prod
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: .env.local
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+    # No host port published. Only Caddy reaches the backend over
+    # the internal Docker network.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Same-origin in production — the SPA calls the API on the
+        # same host it was loaded from. /api is reverse-proxied by
+        # Caddy to the backend. Override at deploy time:
+        VITE_API_BASE_URL: ${PUBLIC_URL}
+        VITE_USE_MOCK: "false"
+    image: bpl-frontend:prod
+    container_name: bpl-frontend-prod
+    restart: unless-stopped
+    depends_on:
+      - backend
+    # Not published — only Caddy reaches the frontend nginx.
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: bpl-caddy
+    restart: unless-stopped
+    depends_on:
+      - backend
+      - frontend
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    environment:
+      # Caddy uses the public hostname from the Caddyfile for ACME.
+      # This env var is just for log clarity.
+      CADDY_HOSTNAME: ${PUBLIC_URL}
+
+volumes:
+  bpl-pgdata-prod:
+  caddy-data:
+  caddy-config:

@@ -1,0 +1,23 @@
+# Keep the build context small and free of secrets.
+build/
+.gradle/
+out/
+*.class
+*.log
+
+# Docs aren't needed in the image.
+*.md
+README*
+LICENSE*
+
+# Editor / OS junk.
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Anything that might contain a secret by accident.
+.env
+.env.*
+*.pem
+*.key

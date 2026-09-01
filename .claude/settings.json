@@ -33,7 +33,21 @@
       "Bash(python append_log.py \"2.5\" \"2.5.4\" \"Bundle check: USER bundle \\(index-*.js\\) does NOT contain UserForm \\(verified via grep\\); Admin chunk \\(Admin-*.js, 10.5kB lazy\\) only loads when route is visited\" \"frontend/dist/assets/\")",
       "Bash(python append_log.py \"2.5\" \"2.5.5\" \"Phase 2 complete: 16 subtasks landed; full v0.3 frontend demoable against mock; ready to wire real backend or add screenshots\" \"SUBTASKS log.docx\")",
       "Bash(python append_log.py \"API\" \"API.1\" \"Write API.md: canonical v0.3 backend implementation contract \\(17 REST + 1 WS; matches SPEC §4 and frontend types\\)\" \"API.md\")",
-      "Bash(cmd.exe /c \"cd /d \\\\\"d:\\\\Office Work\\\\New folder\\\\BPL-Order-Engine-Admin\\\\\" && call run.bat\")"
+      "Bash(cmd.exe /c \"cd /d \\\\\"d:\\\\Office Work\\\\New folder\\\\BPL-Order-Engine-Admin\\\\\" && call run.bat\")",
+      "Bash(ls -la \"d:/Office Work/New folder/BPL-Order-Admin/\" 2>/dev/null; cat \"d:/Office Work/New folder/BPL-Order-Engine-Admin/.gitignore\" 2>/dev/null; echo \"---\"; ls \"d:/Office Work/New folder/BPL-Order-Engine-Admin/backend/src/main/resources/\")",
+      "Read(//d/Office Work/New folder/**)",
+      "Bash(grep -rn \"localhost:5173\" backend/src/main/java/)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(grep -n \"app.cors.allowed-origins\" backend/src/main/java/com/BPL_Order_Engine_Admin/manager/config/CorsConfig.java backend/src/main/java/com/BPL_Order_Engine_Admin/manager/engine/ws/WebSocketConfig.java)",
+      "Bash(cat backend/src/main/resources/META-INF/spring/org.springframework.boot.env.EnvironmentPostProcessor.imports)",
+      "Bash(ls -la backend/Dockerfile backend/.dockerignore frontend/Dockerfile frontend/.dockerignore frontend/nginx.conf frontend/vite.production-env.example docker-compose.prod.yml Caddyfile RUNBOOK.md)",
+      "Bash(grep -n \"open-in-view\\\\|management\\\\|server.port\" backend/src/main/resources/application-prod.properties)",
+      "Bash(cat frontend/vite.config.ts)",
+      "Bash(grep -n \"bpl-pgdata\" docker-compose.yml docker-compose.prod.yml)",
+      "Bash(grep -A3 \"backend:\" docker-compose.prod.yml)",
+      "Bash(head -3 docker-compose.yml)",
+      "Bash(head -10 backend/src/main/resources/application-dev.properties)",
+      "Bash(sed -n '15,45p' backend/src/main/java/com/BPL_Order_Engine_Admin/manager/engine/ws/WebSocketConfig.java)"
     ],
     "deny": [
       "Read(./.env)",

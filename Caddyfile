@@ -1,0 +1,30 @@
+# v0.3 Caddyfile — single-site, public-edge TLS termination.
+#
+# Replace `bpl-admin.example.com` with the public hostname the
+# operator chose. Caddy will fetch a Let's Encrypt cert
+# automatically on first start (the :80 listener is required for
+# the ACME http-01 challenge).
+#
+# All API traffic is same-origin from the browser's point of view,
+# so no CORS headers are needed here. The backend's CorsConfig is
+# driven by the CORS_ALLOWED_ORIGINS env var, set to this same
+# hostname.
+
+{$CADDY_HOSTNAME:bpl-admin.example.com} {
+    # Compress responses.
+    encode zstd gzip
+
+    # API first — Caddy evaluates handlers in order, and an
+    # unanchored reverse_proxy below would otherwise swallow the
+    # /api/* path too. Caddy passes WebSocket Upgrade headers
+    # through transparently.
+    @api path /api/*
+    handle @api {
+        reverse_proxy backend:8080
+    }
+
+    # Everything else is the static SPA. /api/* never reaches here.
+    handle {
+        reverse_proxy frontend:80
+    }
+}

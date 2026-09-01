@@ -3,6 +3,11 @@
 Three Windows batch files in the repo root. Run any of them from a
 `cmd` or `powershell` window.
 
+> **Production deployment:** this README is for engineers hacking
+> on the code. For production deployment (single VM, Docker
+> Compose, Caddy reverse proxy, backups, upgrades, bootstrap
+> admin), see [RUNBOOK.md](RUNBOOK.md).
+
 | Script | What it does |
 |---|---|
 | `run.bat` | Bring up Postgres + dev sshd via docker compose, build the backend, start it in a new window, then start the Vite dev server in another new window. |

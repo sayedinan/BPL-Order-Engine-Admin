@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.vite/
+
+*.md
+README*
+
+.env
+.env.*
+
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
