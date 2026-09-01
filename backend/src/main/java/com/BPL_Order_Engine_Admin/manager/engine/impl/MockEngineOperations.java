@@ -6,7 +6,6 @@ import com.BPL_Order_Engine_Admin.manager.engine.EngineStatus;
 import com.BPL_Order_Engine_Admin.manager.engine.LogLine;
 import com.BPL_Order_Engine_Admin.manager.engine.OrderEngineOperations;
 import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Component;
 
 import java.time.Instant;
 import java.util.ArrayDeque;
@@ -23,12 +22,10 @@ import java.util.concurrent.locks.ReentrantLock;
  * appends a synthetic log line ONLY while {@code status == RUNNING}.
  * On STOPPED, the scheduler is a no-op.
  *
- * <p>One bean, one buffer per engine row. The {@code OrderEngineFactory}
+ * <p>One instance per engine row. The {@code OrderEngineFactory}
  * calls {@code new MockEngineOperations(engine)} for each
- * {@code MOCK}-mode row (no per-instance Spring beans — the
- * {@code @Component} is a singleton, the constructor wraps a row).
+ * {@code MOCK}-mode row.
  */
-@Component
 public class MockEngineOperations implements OrderEngineOperations {
 
     private final String code;

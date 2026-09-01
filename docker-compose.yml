@@ -1,22 +1,60 @@
+# docker-compose.yml — local dev dependencies for the v0.3 backend.
+#
+# Brings up:
+#   - PostgreSQL 16 (data on a named volume)
+#   - A throwaway sshd container (for #19.8 integration tests and
+#     local REAL-mode experimentation; not needed for MOCK engines)
+#
+# Usage:
+#   docker compose up -d
+#   docker compose down -v    # -v drops the volume (fresh DB)
+#
+# The dev profile seeds 4 users + 2 engines on first boot via
+# DevDataInitializer (run when the backend starts against this DB).
+
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: bpl-admin-postgres
-    restart: unless-stopped
+    container_name: bpl-postgres
+    environment:
+      POSTGRES_USER: bpl_admin
+      POSTGRES_PASSWORD: bpl_admin
+      POSTGRES_DB: bpl_admin_dev
     ports:
       - "5432:5432"
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      - bpl-admin-postgres-data:/var/lib/postgresql/data
+      - bpl-pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U bpl_admin -d bpl_admin_dev"]
       interval: 5s
-      timeout: 5s
+      timeout: 3s
       retries: 10
 
+  sshd:
+    # Throwaway sshd for REAL-mode engine experimentation. Username
+    # `bpl`, password `bpl` (matches the default SSH password the
+    # team used during v0.2 staging — DO NOT use this in prod).
+    image: panubo/sshd:latest
+    container_name: bpl-dev-sshd
+    hostname: bpl-dev-sshd
+    ports:
+      - "2222:22"
+    environment:
+      SSH_ENABLE_PASSWORD_AUTH: "true"
+      SSH_USER: bpl
+      SSH_PASSWORD: bpl
+    # Mount a sample log path so the tailer has something to read.
+    volumes:
+      - bpl-sshd-logs:/var/log/bpl
+    command: |
+      bash -c "mkdir -p /var/log/bpl && \
+        echo '#!/bin/sh
+      while true; do
+        echo \"[$$(date +%H:%M:%S)] BPL heartbeat on dev sshd\"
+        sleep 2
+      done' > /var/log/bpl/loop.sh && chmod +x /var/log/bpl/loop.sh && \
+        /usr/sbin/sshd -D -e"
+
 volumes:
-  bpl-admin-postgres-data:
-    name: bpl-admin-postgres-data
+  bpl-pgdata:
+  bpl-sshd-logs:

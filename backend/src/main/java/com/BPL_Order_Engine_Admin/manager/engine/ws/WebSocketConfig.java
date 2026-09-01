@@ -8,8 +8,8 @@ import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry
 /**
  * v0.3 WebSocket config (SPEC §2.9 / API.md §2.9).
  *
- * <p>Maps {@code /api/engines/*/logs/stream} to the engine logs
- * handler. The handler enforces JWT + role+assignment auth; the
+ * <p>Maps the engine-logs-stream path to the engine logs handler.
+ * The handler enforces JWT + role+assignment auth; the
  * SecurityConfig path matchers take care of the upstream filter
  * chain ordering.
  */

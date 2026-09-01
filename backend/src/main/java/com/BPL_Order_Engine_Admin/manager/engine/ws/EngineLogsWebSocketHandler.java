@@ -1,7 +1,6 @@
 package com.BPL_Order_Engine_Admin.manager.engine.ws;
 
 import com.BPL_Order_Engine_Admin.manager.auth.JwtService;
-import com.BPL_Order_Engine_Admin.manager.auth.UserPrincipal;
 import com.BPL_Order_Engine_Admin.manager.engine.EngineEntity;
 import com.BPL_Order_Engine_Admin.manager.engine.EngineRepository;
 import com.BPL_Order_Engine_Admin.manager.engine.EngineStatus;
@@ -13,8 +12,6 @@ import com.BPL_Order_Engine_Admin.manager.user.UserRepository;
 import io.jsonwebtoken.Claims;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.context.annotation.Lazy;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
@@ -23,7 +20,6 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 

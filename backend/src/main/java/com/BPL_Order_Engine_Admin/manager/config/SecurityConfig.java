@@ -65,6 +65,11 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
                 .requestMatchers("/error").permitAll()
                 .requestMatchers("/actuator/health").permitAll()
+                // WebSocket: the JwtAuthFilter doesn't apply (the
+                // handshake is a different code path); the
+                // EngineLogsWebSocketHandler enforces the JWT +
+                // role+assignment check itself.
+                .requestMatchers("/api/engines/*/logs/stream").permitAll()
                 .anyRequest().authenticated())
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
             .exceptionHandling(eh -> eh
