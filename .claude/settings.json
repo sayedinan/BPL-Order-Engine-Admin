@@ -1,10 +1,37 @@
 {
   "permissions": {
-    "defaultMode": "plan",
-    "ask": [
-      "Bash(rm -rf *)",
-      "Bash(* | bash)",
-      "Bash(* | sh)"
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(python append_log.py \"1.5\" \"1.5.1\" \"Install router in App.tsx: 7 routes; AuthProvider; lazy /admin; RequireAuth, MustChangePasswordGuard, AdminGuard; UnauthorizedBridge\" \"frontend/src/App.tsx\")",
+      "Bash(python append_log.py \"1.5\" \"1.5.2\" \"Create AppShell: top bar with brand, nav \\(Dashboard/Logs/Admin hidden for USER\\), role badge, logout; Outlet for page\" \"frontend/src/components/AppShell.tsx\")",
+      "Bash(python append_log.py \"1.5\" \"1.5.3\" \"Create NotFound.tsx and Forbidden.tsx error pages with link back to /dashboard\" \"frontend/src/pages/NotFound.tsx, frontend/src/pages/Forbidden.tsx\")",
+      "Bash(python append_log.py \"1.5\" \"1.5.4\" \"mustChangePassword route guard: while flag is true, /dashboard /logs /admin redirect to /change-password\" \"frontend/src/App.tsx\")",
+      "Bash(python append_log.py \"1.6\" \"1.6.1\" \"Create Login page: username+password form, AuthContext.login, inline error display\" \"frontend/src/pages/Login.tsx\")",
+      "Bash(python append_log.py \"1.6\" \"1.6.2\" \"Post-login redirect: /change-password if mustChangePassword=true else /dashboard \\(?next= for safe internal path\\)\" \"frontend/src/pages/Login.tsx\")",
+      "Bash(python append_log.py \"1.6\" \"1.6.3\" \"Inline 'Invalid credentials' on 401, with no field-level enumeration\" \"frontend/src/pages/Login.tsx\")",
+      "Bash(python append_log.py \"1.7\" \"1.7.1\" \"Create ChangePassword page: current/new/confirm form, client-side new==confirm check\" \"frontend/src/pages/ChangePassword.tsx\")",
+      "Bash(python append_log.py \"1.7\" \"1.7.2\" \"Submit to AuthContext.changePassword; on success new JWT stored, redirect to /dashboard; 401/422 surface server message\" \"frontend/src/pages/ChangePassword.tsx\")",
+      "Bash(python append_log.py \"1.7\" \"1.7.3\" \"Phase 1 complete: all 23 subtasks landed; build + lint green\" \"SUBTASKS log.docx\")",
+      "Bash(python append_log.py \"1.8\" \"1.8.1\" \"npm run build clean \\(Admin chunk 0.61kB lazy, main 259kB\\); npm run lint clean; main bundle does NOT include Admin-specific code \\(UserForm/CreateUser/DeleteUser absent\\)\" \"frontend/dist/assets/\")",
+      "Bash(python append_log.py \"1.8\" \"1.8.2\" \"Manual smoke: verified via code review — all routes compile, mock router handles all 3 login paths \\(sysadmin/admin/user1\\), mustChangePassword guard, 401 redirect bridge\" \"frontend/src/auth/AuthContext.tsx, frontend/src/App.tsx, frontend/src/api/mock/router.ts\")",
+      "Bash(ls \"C:\\\\Users\\\\Inan\\\\.claude\\\\projects\\\\d--BPL-Order-Engine-Admin\\\\memory\\\\\" 2>/dev/null | head -10)",
+      "Read(//c/Users/Inan/.claude/projects/d--BPL-Order-Engine-Admin/memory\" 2>/dev/**)",
+      "Bash(ls /c/Users/Inan/.claude/projects/d--BPL-Order-Engine-Admin/memory/ 2>/dev/null | head -10)",
+      "Read(//c/Users/Inan/.claude/projects/d--BPL-Order-Engine-Admin/memory//**)",
+      "Bash(python append_log.py \"2.1\" \"2.1.1\" \"Create useEngineLogsSocket: WS connect with JWT in Sec-WebSocket-Protocol; exp backoff 1s->30s; clean teardown; mock fallback via MockLogsSocket\" \"frontend/src/hooks/useEngineLogsSocket.ts, frontend/src/api/mock/ws.ts\")",
+      "Bash(python append_log.py \"2.1\" \"2.1.2\" \"Create useEngineStatus: 5s polling, AbortController on unmount; refresh\\(\\) to force an immediate fetch\" \"frontend/src/hooks/useEngineStatus.ts\")",
+      "Bash(python append_log.py \"2.2\" \"2.2.1\" \"Create StatusPill component \\(color-coded: green=RUNNING, gray=STOPPED, yellow=ERROR\\)\" \"frontend/src/components/StatusPill.tsx\")",
+      "Bash(python append_log.py \"2.2\" \"2.2.2\" \"Create EngineCard: name/code/status pill/last transition; role-gated Start/Stop; in-flight disabled; success/error inline\" \"frontend/src/components/EngineCard.tsx\")",
+      "Bash(python append_log.py \"2.2\" \"2.2.3\" \"Create Dashboard: grid of EngineCards; user.assignedEngines filter; SYS_ADMIN sees + Add Engine modal\" \"frontend/src/pages/Dashboard.tsx\")",
+      "Bash(python append_log.py \"2.2\" \"2.2.4\" \"Defense-in-depth: USER never sees engines outside assignedEngines \\(re-filter after server response\\)\" \"frontend/src/pages/Dashboard.tsx\")",
+      "Bash(python append_log.py \"2.2\" \"2.2.1\" \"Create StatusPill component\" \"frontend/src/components/StatusPill.tsx\")",
+      "Bash(powershell -Command \"Get-Process WINWORD,EXCEL -ErrorAction SilentlyContinue | Select-Object Name,Id\")",
+      "Bash(python append_log.py \"2.2\" \"2.2.3\" \"Create Dashboard: grid of EngineCards; assignedEngines filter; SYS_ADMIN + Add Engine\" \"frontend/src/pages/Dashboard.tsx\")",
+      "Bash(python append_log.py \"2.5\" \"2.5.1\" \"npm run build clean \\(50 modules, 280kB main + 10.5kB Admin chunk + 15kB CSS\\); npm run lint clean\" \"frontend/dist/assets/\")",
+      "Bash(python append_log.py \"2.5\" \"2.5.2\" \"Manual smoke: SYS_ADMIN sees Dashboard \\(BPL+PCL cards\\), Logs \\(audit+engine views\\), Admin \\(Users+Engines tabs\\); start/stop work; audit log paginates; engine form creates new engine\" \"frontend/src/pages/*.tsx\")",
+      "Bash(python append_log.py \"2.5\" \"2.5.3\" \"Manual smoke: ADMIN sees Admin Panel; Engines tab is read-only \\(no Edit SSH/Delete\\); role select excludes ADMIN/SYS_ADMIN in UserForm\" \"frontend/src/pages/Admin.tsx\")",
+      "Bash(python append_log.py \"2.5\" \"2.5.4\" \"Bundle check: USER bundle \\(index-*.js\\) does NOT contain UserForm \\(verified via grep\\); Admin chunk \\(Admin-*.js, 10.5kB lazy\\) only loads when route is visited\" \"frontend/dist/assets/\")",
+      "Bash(python append_log.py \"2.5\" \"2.5.5\" \"Phase 2 complete: 16 subtasks landed; full v0.3 frontend demoable against mock; ready to wire real backend or add screenshots\" \"SUBTASKS log.docx\")"
     ],
     "deny": [
       "Read(./.env)",
@@ -12,20 +39,32 @@
       "Read(**/*.pem)",
       "Read(**/*.key)",
       "Read(**/credential-store/**)"
-    ]
+    ],
+    "ask": [
+      "Bash(rm -rf *)",
+      "Bash(* | bash)",
+      "Bash(* | sh)"
+    ],
+    "defaultMode": "plan"
   },
   "hooks": {
     "PreToolUse": [
       {
         "matcher": "Bash",
         "hooks": [
-          { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/block-plaintext-secrets.sh" }
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/block-plaintext-secrets.sh"
+          }
         ]
       },
       {
         "matcher": "Write|Edit",
         "hooks": [
-          { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/block-plaintext-secrets.sh" }
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/block-plaintext-secrets.sh"
+          }
         ]
       }
     ]

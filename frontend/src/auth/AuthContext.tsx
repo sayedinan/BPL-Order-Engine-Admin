@@ -1,3 +1,19 @@
+/**
+ * The v0.3 AuthContext.
+ *
+ * Source of truth for "who is logged in" in the React app. Exposes
+ * { user, token, mustChangePassword, isLoading, login, logout,
+ * changePassword, refresh } per the auth-context-pattern skill.
+ *
+ * The token lives in `localStorage` under `bpl-admin.token`. The
+ * api/client reads it on every request and clears it on 401, which
+ * triggers this provider's `setUser(null)` on the next render.
+ *
+ * The Login page is responsible for the post-login redirect (to
+ * /change-password if mustChangePassword, else /dashboard). The
+ * AppShell handles the mustChangePassword route guard for an existing
+ * user with a stale flag.
+ */
 import {
   useCallback,
   useEffect,
@@ -5,114 +21,106 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { AuthContext, type AuthContextValue } from './AuthContextObject';
-import { DEMO_USERS, type AuthState, type Role } from './types';
+import { authApi, getToken, setToken } from '../api/client';
+import type { UserResponse } from '../api/types';
+import { AuthContext, type AuthContextValue } from './context';
 
-/**
- * Encode Basic Auth credentials. We use {@code btoa} (browser-builtin)
- * and fall back to a manual encoder for non-ASCII safety; passwords in
- * this app are ASCII but the fallback costs nothing.
- */
-function encodeBasicAuth(username: string, password: string): string {
-  const raw = `${username}:${password}`;
-  if (typeof btoa === 'function') {
-    try {
-      return btoa(raw);
-    } catch {
-      // fall through to manual encoder if the input has non-Latin1 chars
-    }
-  }
-  // Manual base64 (RFC 4648) for non-browser environments or non-Latin1 input.
-  const utf8 = unescape(encodeURIComponent(raw));
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-  let out = '';
-  for (let i = 0; i < utf8.length; i += 3) {
-    const a = utf8.charCodeAt(i);
-    const b = i + 1 < utf8.length ? utf8.charCodeAt(i + 1) : NaN;
-    const c = i + 2 < utf8.length ? utf8.charCodeAt(i + 2) : NaN;
-    out += chars[a >> 2];
-    out += chars[((a & 3) << 4) | (Number.isNaN(b) ? 0 : b >> 4)];
-    out += Number.isNaN(b) ? '=' : chars[((b & 15) << 2) | (Number.isNaN(c) ? 0 : c >> 6)];
-    out += Number.isNaN(c) ? '=' : chars[c & 63];
-  }
-  return out;
-}
-
-const STORAGE_KEY = 'bpl-admin-auth-v1';
-
-/**
- * Read persisted credentials from {@code localStorage}. We keep the
- * encoded header so a page refresh in the middle of a demo doesn't
- * force the user to re-type the password.
- */
-function readPersistedAuth(): AuthState | null {
-  if (typeof localStorage === 'undefined') return null;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as AuthState;
-    if (
-      typeof parsed.username === 'string' &&
-      (parsed.role === 'ADMIN' || parsed.role === 'VIEWER') &&
-      typeof parsed.authorizationHeader === 'string'
-    ) {
-      return parsed;
-    }
-  } catch {
-    /* corrupt entry — drop it */
-  }
-  return null;
-}
-
-function writePersistedAuth(state: AuthState | null): void {
-  if (typeof localStorage === 'undefined') return;
-  if (state === null) {
-    localStorage.removeItem(STORAGE_KEY);
-  } else {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  }
-}
+export type { AuthContextValue } from './context';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [auth, setAuth] = useState<AuthState | null>(() => readPersistedAuth());
+  const [user, setUser] = useState<UserResponse | null>(null);
+  const [token, setTokenState] = useState<string | null>(() => getToken());
+  const [isLoading, setIsLoading] = useState(true);
 
+  // On mount (and when the token changes externally — e.g. from a
+  // successful login in another tab via the `storage` event), validate
+  // the token with /me. A 401 means the token is bad; clear and the
+  // route guard redirects to /login.
   useEffect(() => {
-    writePersistedAuth(auth);
-  }, [auth]);
+    let cancelled = false;
+    async function probe() {
+      if (!token) {
+        setUser(null);
+        setIsLoading(false);
+        return;
+      }
+      try {
+        const me = await authApi.me();
+        if (!cancelled) {
+          setUser(me);
+          setIsLoading(false);
+        }
+      } catch {
+        if (!cancelled) {
+          setToken(null);
+          setTokenState(null);
+          setUser(null);
+          setIsLoading(false);
+        }
+      }
+    }
+    probe();
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
 
-  const signIn = useCallback((username: string, password: string): boolean => {
-    const trimmedUser = username.trim();
-    if (!trimmedUser || !password) return false;
-    const matchRole = (u: typeof DEMO_USERS.ADMIN | typeof DEMO_USERS.VIEWER) =>
-      u.username === trimmedUser && u.password === password;
-    let role: Role;
-    if (matchRole(DEMO_USERS.ADMIN)) role = 'ADMIN';
-    else if (matchRole(DEMO_USERS.VIEWER)) role = 'VIEWER';
-    else return false;
-    setAuth({
-      username: trimmedUser,
-      role,
-      authorizationHeader: encodeBasicAuth(trimmedUser, password),
-    });
-    return true;
+  const login = useCallback(
+    async (username: string, password: string): Promise<UserResponse> => {
+      // The mock accepts `<username>123`. The real backend takes the
+      // user's literal input.
+      const res = await authApi.login({ username, password });
+      setToken(res.token);
+      setTokenState(res.token);
+      setUser(res.user);
+      return res.user;
+    },
+    [],
+  );
+
+  const logout = useCallback(async () => {
+    try {
+      // Best-effort — the server writes a LOGOUT audit row.
+      await authApi.logout();
+    } catch {
+      /* even if the network call fails, clear the local state */
+    }
+    setToken(null);
+    setTokenState(null);
+    setUser(null);
   }, []);
 
-  const signInAs = useCallback((role: Role) => {
-    const u = DEMO_USERS[role];
-    setAuth({
-      username: u.username,
-      role: u.role,
-      authorizationHeader: encodeBasicAuth(u.username, u.password),
-    });
-  }, []);
+  const changePassword = useCallback(
+    async (
+      currentPassword: string,
+      newPassword: string,
+    ): Promise<UserResponse> => {
+      const res = await authApi.changePassword({ currentPassword, newPassword });
+      setToken(res.token);
+      setTokenState(res.token);
+      setUser(res.user);
+      return res.user;
+    },
+    [],
+  );
 
-  const signOut = useCallback(() => {
-    setAuth(null);
+  const refresh = useCallback(async () => {
+    const me = await authApi.me();
+    setUser(me);
   }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ auth, signIn, signInAs, signOut }),
-    [auth, signIn, signInAs, signOut]
+    () => ({
+      user,
+      token,
+      mustChangePassword: user?.mustChangePassword ?? false,
+      isLoading,
+      login,
+      logout,
+      changePassword,
+      refresh,
+    }),
+    [user, token, isLoading, login, logout, changePassword, refresh],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
