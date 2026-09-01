@@ -1,16 +1,19 @@
 # v0.3 Build — Task List
 
 Source: SPEC.md (v0.3), instruction.md, rbac-redesign-spec.md.
-18 tasks. Run in order. Each task is a checkpoint; review between any two.
+**This file is the source of truth for the build. Any change to the task list is recorded here first.**
 
 Legend: 📄 = doc-only, ⚙️ = backend, 🎨 = frontend, ✅ = verification.
+Run in order. Each task is a checkpoint; review between any two.
 
 | # | Layer | Task | Done |
 |---|---|---|:---:|
 | 11 | 📄 | SPEC.md — apply USER audit log fix | ☐ |
 | 12 | ⚙️ | qa-reviewer — add USER→403 audit log check | ☐ |
 | 13 | 📄 | Rewrite rbac-redesign-spec.md as resolution doc | ☐ |
+| 14a | 📄 | SPEC.md — add `mustChangePassword` + change-password endpoint | ☐ |
 | 14 | ⚙️ | Backend foundation: Gradle deps + Flyway V1__init.sql + 3 JPA entities | ☐ |
+| 14b | ⚙️ | `User` entity gains `mustChangePassword: boolean` (default `true`) | ☐ |
 | 15 | ⚙️ | Backend: repositories + SecurityConfig + JWT filter + login | ☐ |
 | 16 | ⚙️ | Backend: User CRUD endpoints + @Audited + AuditAspect | ☐ |
 | 17 | ⚙️ | Backend: Engine CRUD + factory + MOCK impl | ☐ |
@@ -21,6 +24,7 @@ Legend: 📄 = doc-only, ⚙️ = backend, 🎨 = frontend, ✅ = verification.
 | 22 | ✅ | Backend: build + test pass + DB up | ☐ |
 | 23 | 🎨 | Frontend: AuthContext + api/client + router shell | ☐ |
 | 24 | 🎨 | Frontend: Login page | ☐ |
+| 24a | 🎨 | Frontend: ChangePassword page | ☐ |
 | 25 | 🎨 | Frontend: Dashboard with EngineCards + WS + polling | ☐ |
 | 26 | 🎨 | Frontend: Logs page with both filter types | ☐ |
 | 27 | 🎨 | Frontend: Admin Panel (Users + Engines tabs) | ☐ |
@@ -28,7 +32,63 @@ Legend: 📄 = doc-only, ⚙️ = backend, 🎨 = frontend, ✅ = verification.
 
 ---
 
-## 11. SPEC.md — apply USER audit log fix  📄
+## Pending doc edits (the two carry-forward items)
+
+Before any code, three doc edits must land:
+
+- **#11** — SPEC.md USER-audit fix (USER cannot see audit log; gets 403 on `/api/audit-logs`; Logs page hides "System Audit Logs" for USER).
+- **#12** — qa-reviewer gains the "USER→403 audit log" check.
+- **#13** — rbac-redesign-spec.md becomes a "what was decided and why" doc, with each of the sketch's 6 open questions answered against v0.3.
+
+**Why these come first:** the spec must be locked before the agents run. If #11 is open while #14 is in flight, the agents can't tell which contract to implement.
+
+## New tasks from the Sept 1 conversation
+
+Three new requirements emerged after the v0.3 SPEC was written. Each is now a task:
+
+### #14a — SPEC.md: add `mustChangePassword` + change-password endpoint
+**Decision (Sept 1):** Force password change on first login.
+
+The admin sets the initial password at user creation. The user logs in with it. The user must change it on first login.
+
+**SPEC.md additions:**
+
+- `User.mustChangePassword: boolean` (default `true` on create; `false` after the first successful change).
+- `JwtPayload.mustChangePassword: boolean` — included in the JWT issued at login.
+- `LoginResponse` gains the same field for the client to read without parsing the JWT.
+- `POST /api/auth/change-password` (authenticated) — body: `{ currentPassword, newPassword }`. 400 on missing fields, 401 on bad current password, 422 on weak new password. Writes a `CHANGE_PASSWORD` audit row. Sets `mustChangePassword = false` and issues a new JWT.
+- A new `AuditAction.CHANGE_PASSWORD` enum value.
+- §5.2 Login page — after login, if `mustChangePassword = true`, redirect to `/change-password` instead of `/dashboard`.
+- New §5.2.1 Change Password page — three fields (current, new, confirm), POST on submit, redirect to `/dashboard` on success.
+
+**Why this is a doc task first:** the contract (where the flag lives, what the endpoint takes, where the redirect goes) needs to be pinned before any code.
+
+### #14b — `User` entity gains `mustChangePassword`
+**Scope:** `User.java` (JPA entity) + `V1__init.sql` (adds the column).
+
+- `User` field: `private boolean mustChangePassword;` with `@Column(nullable = false)`.
+- `V1__init.sql` adds the column with `DEFAULT true NOT NULL` so existing dev seed users get the flag.
+- Set `mustChangePassword = true` in the create-user service path.
+- Set `mustChangePassword = false` in the change-password service path.
+
+**Why this is a separate task from #14:** #14 is "build the foundation" (Gradle + Flyway + 3 entities). #14b is "add one field to one entity." Cleaner to do them as a diff, with #14 reviewed first, then #14b lands on top.
+
+### #24a — Frontend Change Password page
+**Scope:** `BPL-Order_Engine-Admin_ui/src/pages/ChangePassword.tsx`, route registration, `AuthContext` flag.
+
+- Form: current password, new password, confirm new password.
+- POST `/api/auth/change-password` with the body.
+- On success: store the new JWT, clear `mustChangePassword`, redirect to `/dashboard`.
+- On 401: "Current password is incorrect."
+- On 422: surface the validation message.
+- `App.tsx` route: `/change-password`, gated as authenticated.
+- `AuthContext` exposes `mustChangePassword` from the user object.
+
+**Why this is a separate task from #23:** #23 is "scaffold the app shell and auth flow." #24a is "add a new page that depends on #23 being in place." Cleaner to do them as a diff.
+
+## Tasks
+
+### 11. SPEC.md — apply USER audit log fix  📄
 
 **Scope:** `SPEC.md` only.
 
@@ -37,13 +97,13 @@ Legend: 📄 = doc-only, ⚙️ = backend, 🎨 = frontend, ✅ = verification.
 - §5.4 Logs page: the Source dropdown hides "System Audit Logs" for USER. USER sees only "Engine Execution Logs".
 - §5.1 routes: `/logs` stays "all authenticated" but with a note that USER sees a reduced view.
 
-## 12. qa-reviewer — add USER→403 audit log check  ⚙️ (agent config)
+### 12. qa-reviewer — add USER→403 audit log check  ⚙️ (agent config)
 
 **Scope:** `.claude/agents/qa-reviewer.md`.
 
 Add a check: `GET /api/audit-logs` with USER role must return 403. The query must not filter by `assignedEngines` (USER is rejected outright, not partially filtered). Cross-reference the new §4.5 wording. Severity: `blocker` if the endpoint leaks audit rows to USER.
 
-## 13. Rewrite rbac-redesign-spec.md as resolution doc  📄
+### 13. Rewrite rbac-redesign-spec.md as resolution doc  📄
 
 **Scope:** `rbac-redesign-spec.md` (full rewrite).
 
@@ -58,7 +118,19 @@ Add a check: `GET /api/audit-logs` with USER role must return 403. The query mus
 - Explain the USER-audit decision in context (USER sees engine execution logs but never the audit log).
 - The file becomes "what was decided and why," not a parallel spec.
 
-## 14. Backend foundation: Gradle deps + Flyway V1__init.sql + 3 JPA entities  ⚙️
+### 14a. SPEC.md — add `mustChangePassword` + change-password endpoint  📄
+
+**Scope:** `SPEC.md` only.
+
+- §3.2 `User` entity: add `mustChangePassword: boolean` (default `true` on create).
+- §3.5 `AuditAction` enum: add `CHANGE_PASSWORD`.
+- §4.2 `LoginResponse` gains `mustChangePassword: boolean`.
+- §4.2 new endpoint: `POST /api/auth/change-password` (authenticated). Body `{ currentPassword, newPassword }`. Error mapping: 400 missing fields, 401 bad current password, 422 weak new password. Writes a `CHANGE_PASSWORD` audit row. Sets `mustChangePassword = false` and returns a new JWT.
+- §5.1 routes: new `/change-password` page.
+- §5.2 Login page: after login, if `mustChangePassword = true`, redirect to `/change-password` instead of `/dashboard`.
+- New §5.2.1 Change Password page.
+
+### 14. Backend foundation: Gradle deps + Flyway V1__init.sql + 3 JPA entities  ⚙️
 
 **Scope:** `BPL-Order-Engine-Admin-backend/`.
 
@@ -67,7 +139,18 @@ Add a check: `GET /api/audit-logs` with USER role must return 403. The query mus
 - Three JPA entities per `jpa-entity-patterns.md`: `User`, `Engine`, `AuditLog`. UUID PKs, `@Version` on the first two, `@Getter`/`@Setter` (not `@Data`), `LAZY` on to-many.
 - No repositories, services, or controllers yet. This task ends with `./gradlew compileJava` green.
 
-## 15. Backend: repositories + SecurityConfig + JWT filter + login  ⚙️
+### 14b. `User` entity gains `mustChangePassword`  ⚙️
+
+**Scope:** `User.java` + `V1__init.sql`.
+
+- `User` field: `private boolean mustChangePassword;` with `@Column(nullable = false)`.
+- `V1__init.sql` adds the column with `DEFAULT true NOT NULL` so existing dev seed users get the flag.
+- Set `mustChangePassword = true` in the create-user service path.
+- Set `mustChangePassword = false` in the change-password service path.
+
+**Depends on:** #14 (the User entity must exist before this task edits it).
+
+### 15. Backend: repositories + SecurityConfig + JWT filter + login  ⚙️
 
 **Scope:** backend, auth + security layer.
 
@@ -75,13 +158,13 @@ Add a check: `GET /api/audit-logs` with USER role must return 403. The query mus
 - `SecurityConfig`: JWT filter, JPA `UserDetailsService`, `@PreAuthorize` enabled, role hierarchy.
 - `JasyptConfig`: `StringEncryptor` bean from `JASYPT_ENCRYPTOR_PASSWORD` env var.
 - `CorsConfig`, `JacksonConfig`.
-- `JwtService` (sign/validate), `JwtAuthFilter`, `UserPrincipal` (`UserDetails` wrapping `User`).
-- `AuthController`: `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`.
+- `JwtService` (sign/validate, with `mustChangePassword` claim), `JwtAuthFilter`, `UserPrincipal` (`UserDetails` wrapping `User`).
+- `AuthController`: `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, `POST /api/auth/change-password` (the #14a endpoint, implemented here).
 - `AuthenticationSuccessListener` and `AuthenticationFailureListener` for `LOGIN_SUCCESS`/`LOGIN_FAIL` audit rows.
-- `V2__seed_admin.sql` (dev profile only): one SYS_ADMIN with a known BCrypt-hashed password.
+- `V2__seed_admin.sql` (dev profile only): one SYS_ADMIN with `mustChangePassword = true` and a known BCrypt-hashed password.
 - `./gradlew test` green with a `@SpringBootTest` smoke.
 
-## 16. Backend: User CRUD endpoints + @Audited + AuditAspect  ⚙️
+### 16. Backend: User CRUD endpoints + @Audited + AuditAspect  ⚙️
 
 **Scope:** backend, user management.
 
@@ -89,8 +172,9 @@ Add a check: `GET /api/audit-logs` with USER role must return 403. The query mus
 - `UserService`, `UserController`.
 - Endpoints per SPEC §4.4: `GET /api/users`, `POST /api/users` (role-checked: SYS_ADMIN any, ADMIN USER only), `DELETE /api/users/{id}` (self-delete rejected, last-SYS_ADMIN delete rejected), `PATCH /api/users/{id}/roles`.
 - Validation on request DTOs. Standard error envelope on every failure.
+- New users default to `mustChangePassword = true`.
 
-## 17. Backend: Engine CRUD + factory + MOCK impl  ⚙️
+### 17. Backend: Engine CRUD + factory + MOCK impl  ⚙️
 
 **Scope:** backend, engine layer base.
 
@@ -99,7 +183,7 @@ Add a check: `GET /api/audit-logs` with USER role must return 403. The query mus
 - `MockEngineOperations` impl (refactor of v0.2's in-memory state machine, per-engine wrapper).
 - `EngineService` emits `EngineStatusChangedEvent` on transitions.
 
-## 18. Backend: engine status/start/stop/logs endpoints  ⚙️
+### 18. Backend: engine status/start/stop/logs endpoints  ⚙️
 
 **Scope:** backend, engine control surface.
 
@@ -108,7 +192,7 @@ Add a check: `GET /api/audit-logs` with USER role must return 403. The query mus
 - `@Audited` on start/stop for success AND failure paths.
 - Error mapping per `ssh-engine-ops.md`: `EngineAuthException`→403, `EngineUnreachableException`→502, `EngineScriptException`→502, future timeout→504.
 
-## 19. Backend: SshBackedEngine + background log tailer  ⚙️
+### 19. Backend: SshBackedEngine + background log tailer  ⚙️
 
 **Scope:** backend, REAL-mode engine impl.
 
@@ -117,7 +201,7 @@ Add a check: `GET /api/audit-logs` with USER role must return 403. The query mus
 - `LogBuffer`: per-engine `ArrayDeque<LogLine>`, cap 500.
 - `LogTailerRegistry`: one thread per `RUNNING` `mode=REAL` engine. Exponential backoff reconnect, capped 60s. Starts on `EngineStatusChangedEvent(RUNNING)`, stops on `STOPPED`/deletion/5 consecutive failures.
 
-## 20. Backend: WebSocket logs/stream handler  ⚙️
+### 20. Backend: WebSocket logs/stream handler  ⚙️
 
 **Scope:** backend, real-time logs.
 
@@ -129,7 +213,7 @@ Add a check: `GET /api/audit-logs` with USER role must return 403. The query mus
 - On `STOPPED`/engine deletion: send `{"event": "closed", "reason": "engine_stopped" | "engine_deleted"}` and close.
 - Same ROLE and assignment gates as the HTTP endpoints.
 
-## 21. Backend: /api/audit-logs endpoint  ⚙️
+### 21. Backend: /api/audit-logs endpoint  ⚙️
 
 **Scope:** backend, audit read.
 
@@ -138,7 +222,7 @@ Add a check: `GET /api/audit-logs` with USER role must return 403. The query mus
 - `USER`: **403** (rejected outright, not filtered).
 - `details` returned as parsed JSON object, not a string.
 
-## 22. Backend: build + test pass + DB up  ✅
+### 22. Backend: build + test pass + DB up  ✅
 
 **Scope:** backend verification.
 
@@ -148,25 +232,38 @@ Add a check: `GET /api/audit-logs` with USER role must return 403. The query mus
 - Verify the WebSocket handshake + initial snapshot + live update.
 - `qa-reviewer` pass on the full backend diff.
 
-## 23. Frontend: AuthContext + api/client + router shell  🎨
+### 23. Frontend: AuthContext + api/client + router shell  🎨
 
 **Scope:** `BPL-Order_Engine-Admin_ui/src/`.
 
-- `AuthContext`: `{ user, token, login, logout, isLoading }`. On mount, validate token via `GET /api/auth/me`, hydrate user. On 401, clear + redirect to `/login`.
+- `AuthContext`: `{ user, token, login, logout, isLoading, mustChangePassword }`. On mount, validate token via `GET /api/auth/me`, hydrate user. On 401, clear + redirect to `/login`. If `mustChangePassword = true` after login, redirect to `/change-password` instead of `/dashboard`.
 - `api/client.ts`: `fetch` wrapper with `Authorization: Bearer …`, 401 → redirect, error envelope unwrap to thrown `Error(message)`.
-- React Router root: `/login`, `/dashboard`, `/logs`, `/admin` (lazy for non-USER), `/404`, `/403`.
+- React Router root: `/login`, `/dashboard`, `/logs`, `/admin` (lazy for non-USER), `/change-password`, `/404`, `/403`.
 - `AppShell`: top bar with role badge + logout button.
 
-## 24. Frontend: Login page  🎨
+### 24. Frontend: Login page  🎨
 
 **Scope:** frontend, login flow.
 
 - Per SPEC §5.2. Username + password form.
-- POST `/api/auth/login`, store JWT in `localStorage`, redirect to `/dashboard`.
+- POST `/api/auth/login`, store JWT in `localStorage`, redirect to `/change-password` if `mustChangePassword = true` (else `/dashboard`).
 - Inline "Invalid credentials" on 401.
 - Token validation on mount via `GET /api/auth/me` (handled by `AuthContext`).
 
-## 25. Frontend: Dashboard with EngineCards + WS + polling  🎨
+### 24a. Frontend Change Password page  🎨
+
+**Scope:** `BPL-Order_Engine-Admin_ui/src/pages/ChangePassword.tsx`, route registration.
+
+- Form: current password, new password, confirm new password.
+- POST `/api/auth/change-password` with the body.
+- On success: store the new JWT (clears `mustChangePassword`), redirect to `/dashboard`.
+- On 401: "Current password is incorrect."
+- On 422: surface the validation message.
+- `App.tsx` route: `/change-password`, gated as authenticated.
+
+**Depends on:** #23 (the route registration is in the shell from #23).
+
+### 25. Frontend: Dashboard with EngineCards + WS + polling  🎨
 
 **Scope:** frontend, engine dashboard.
 
@@ -176,7 +273,7 @@ Add a check: `GET /api/audit-logs` with USER role must return 403. The query mus
 - `useEngineStatus` hook: WebSocket primary, polling (every 5s) fallback when WS closed.
 - SYS_ADMIN sees "+ Add Engine" button.
 
-## 26. Frontend: Logs page with both filter types  🎨
+### 26. Frontend: Logs page with both filter types  🎨
 
 **Scope:** frontend, logs view.
 
@@ -186,7 +283,7 @@ Add a check: `GET /api/audit-logs` with USER role must return 403. The query mus
 - Engine execution logs via `GET /api/engines/{code}/logs?limit=100` + the WebSocket stream.
 - Paginated table, "View raw JSON" toggle.
 
-## 27. Frontend: Admin Panel (Users + Engines tabs)  🎨
+### 27. Frontend: Admin Panel (Users + Engines tabs)  🎨
 
 **Scope:** frontend, admin surface.
 
@@ -196,12 +293,12 @@ Add a check: `GET /api/audit-logs` with USER role must return 403. The query mus
 - `UserForm`, `EngineForm` components.
 - All POSTs/PATCHes/DELETEs write `AuditLog` rows on the backend (via `@Audited`).
 
-## 28. Frontend: build + manual role smoke + screenshots  ✅
+### 28. Frontend: build + manual role smoke + screenshots  ✅
 
 **Scope:** frontend verification.
 
 - `npm run build`, `npm run lint`.
-- Manual smoke as SYS_ADMIN, ADMIN, USER: Admin Panel hidden, engine list filter, role gates, log filters.
+- Manual smoke as SYS_ADMIN, ADMIN, USER: Admin Panel hidden, engine list filter, role gates, log filters, force-change-password flow.
 - Screenshots of each page in each role for the slides.
 - `qa-reviewer` pass on the frontend diff.
 
@@ -213,4 +310,10 @@ Add a check: `GET /api/audit-logs` with USER role must return 403. The query mus
 - After every backend task, `./gradlew compileJava` is green. After every frontend task, `npm run build` is green.
 - After task 22 and 28, `qa-reviewer` runs.
 - If a task's scope grows, split it. If a task's scope shrinks, leave a note in the commit and continue.
-- Doc tasks (#11, #12, #13) come first because the spec must be locked before any code.
+- Doc tasks (#11, #12, #13, #14a) come first because the spec must be locked before any code.
+- New tasks from the Sept 1 conversation (#14a, #14b, #24a) are inserted into the order, not appended.
+
+## Change log
+
+- **Sept 1, 2026** — first version of this file. 18 tasks. Added #14a, #14b, #24a for the force-change-password flow that emerged from the Sept 1 walkthrough.
+- **Sept 1, 2026** — added the "Pending doc edits" preamble and the "Change log" section to make the file the source of truth for task-list changes.
