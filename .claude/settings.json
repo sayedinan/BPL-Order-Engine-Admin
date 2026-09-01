@@ -2,13 +2,11 @@
   "permissions": {
     "defaultMode": "plan",
     "ask": [
-      "Bash(ssh *)",
-      "Bash(scp *)"
+      "Bash(rm -rf *)",
+      "Bash(* | bash)",
+      "Bash(* | sh)"
     ],
     "deny": [
-      "Bash(rm -rf *)",
-      "Bash(curl * | *)",
-      "Bash(* | bash)",
       "Read(./.env)",
       "Read(./.env.*)",
       "Read(**/*.pem)",
@@ -21,7 +19,13 @@
       {
         "matcher": "Bash",
         "hooks": [
-          { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard-ssh.sh" }
+          { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/block-plaintext-secrets.sh" }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/block-plaintext-secrets.sh" }
         ]
       }
     ]
