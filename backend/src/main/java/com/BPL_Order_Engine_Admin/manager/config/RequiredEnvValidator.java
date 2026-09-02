@@ -18,9 +18,20 @@ import java.util.List;
  * message naming every missing variable, rather than crashing
  * later with a confusing stack trace.
  *
- * <p>This runs in the {@code prod} profile only — the dev profile
- * supplies defaults via {@code application-dev.properties}, and
- * failing in dev would block {@code run.bat} on a fresh checkout.
+ * <p>Fires when ANY of the following is true:
+ * <ul>
+ *   <li>The {@code prod} profile is in the active profile list (the
+ *       normal path: {@code SPRING_PROFILES_ACTIVE=prod} via the
+ *       prod compose file).</li>
+ *   <li>No profile is active AND at least one of the required
+ *       prod vars is set. This catches the mistake of deploying
+ *       the prod image without {@code SPRING_PROFILES_ACTIVE=prod}
+ *       — a half-configured env is almost always a real prod boot
+ *       that forgot the profile flag, not a dev boot.</li>
+ * </ul>
+ *
+ * <p>A pure dev boot (no profile, none of the prod vars set) is
+ * never blocked — that's the {@code run.bat} path.
  *
  * <p>Auto-detected via
  * {@code META-INF/spring/org.springframework.boot.env.EnvironmentPostProcessor.imports}
@@ -39,7 +50,7 @@ public class RequiredEnvValidator implements EnvironmentPostProcessor {
 
     @Override
     public void postProcessEnvironment(ConfigurableEnvironment environment, SpringApplication application) {
-        if (!isProdProfile(environment)) {
+        if (!shouldEnforce(environment)) {
             return;
         }
         List<String> missing = new ArrayList<>();
@@ -58,7 +69,36 @@ public class RequiredEnvValidator implements EnvironmentPostProcessor {
         }
     }
 
-    private boolean isProdProfile(ConfigurableEnvironment environment) {
+    /**
+     * Enforce iff the operator is in a prod-shaped boot:
+     *   - the prod profile is active, OR
+     *   - no profile is active AND at least one required prod var
+     *     is set (catches "deployed prod image but forgot
+     *     SPRING_PROFILES_ACTIVE=prod").
+     *
+     * Pure dev boots (no profile, no prod vars) skip enforcement.
+     */
+    private boolean shouldEnforce(ConfigurableEnvironment environment) {
+        if (hasProdProfile(environment)) {
+            return true;
+        }
+        if (environment.getActiveProfiles().length > 0) {
+            // Some other profile is active (e.g. "dev"). Dev profile
+            // supplies its own defaults; the operator opted into
+            // dev. Don't second-guess them.
+            return false;
+        }
+        // No profile active — treat as prod if it looks prod-shaped.
+        for (String name : REQUIRED_VARS) {
+            String value = environment.getProperty(name);
+            if (value != null && !value.isBlank()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hasProdProfile(ConfigurableEnvironment environment) {
         for (String profile : environment.getActiveProfiles()) {
             if ("prod".equalsIgnoreCase(profile.trim())) {
                 return true;

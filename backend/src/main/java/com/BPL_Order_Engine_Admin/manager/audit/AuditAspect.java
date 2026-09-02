@@ -39,7 +39,12 @@ import java.util.Optional;
  *       {@code details} object (or whatever the SpEL expression
  *       produced).</li>
  *   <li>On failure: writes a row with
- *       {@code details: { error: <class>, message: <truncated> }}.</li>
+ *       {@code details: { error: <class>, message: <truncated> }}.
+ *       If the exception implements {@link AuditableFailure}, the
+ *       {@code details} map it returns replaces the default — this
+ *       is how {@code BAD_CURRENT_PASSWORD} and similar reason-coded
+ *       failures flow through the aspect instead of via inline
+ *       {@code auditLogRepository.save} calls in the service.</li>
  * </ol>
  */
 @Aspect
@@ -69,8 +74,14 @@ public class AuditAspect {
         try {
             result = pjp.proceed();
         } catch (Throwable t) {
-            // Failure path: write a row with the exception class.
+            // Failure path: prefer the exception's own details map
+            // (AuditableFailure) over the generic { error, message }
+            // shape. The exception class is always included so the
+            // reader can see what was thrown.
             Map<String, Object> details = new LinkedHashMap<>();
+            if (t instanceof AuditableFailure af) {
+                details.putAll(af.auditDetails());
+            }
             details.put("error", t.getClass().getSimpleName());
             details.put("message", truncate(safeMessage(t), 256));
             write(audited, pjp, details, /* success = */ false);

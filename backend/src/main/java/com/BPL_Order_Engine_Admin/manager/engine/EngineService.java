@@ -3,6 +3,7 @@ package com.BPL_Order_Engine_Admin.manager.engine;
 import com.BPL_Order_Engine_Admin.manager.engine.dto.CreateEngineRequest;
 import com.BPL_Order_Engine_Admin.manager.engine.dto.EngineResponse;
 import com.BPL_Order_Engine_Admin.manager.engine.dto.UpdateEngineSshRequest;
+import com.BPL_Order_Engine_Admin.manager.engine.dto.UpdateEngineSshResult;
 import com.BPL_Order_Engine_Admin.manager.user.RoleType;
 import com.BPL_Order_Engine_Admin.manager.user.User;
 import org.springframework.http.HttpStatus;
@@ -12,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -92,10 +94,10 @@ public class EngineService {
     }
 
     @Transactional
-    public EngineResponse updateSsh(String code, UpdateEngineSshRequest req) {
+    public UpdateEngineSshResult updateSsh(String code, UpdateEngineSshRequest req) {
         EngineEntity e = engineRepository.findByCodeAndDeletedAtIsNull(code)
             .orElseThrow(() -> new EngineNotSupportedException(code));
-        Set<String> changed = new LinkedHashSet<>();
+        List<String> changed = new ArrayList<>();
         if (req.name() != null) { e.setName(req.name()); changed.add("name"); }
         if (req.mode() != null) { e.setMode(req.mode()); changed.add("mode"); }
         if (req.serverIp() != null) { e.setServerIp(req.serverIp()); changed.add("serverIp"); }
@@ -105,7 +107,7 @@ public class EngineService {
         if (req.stopScript() != null) { e.setStopScript(emptyToNull(req.stopScript())); changed.add("stopScript"); }
         if (req.logScript() != null) { e.setLogScript(emptyToNull(req.logScript())); changed.add("logScript"); }
         engineRepository.save(e);
-        return EngineResponse.from(e);
+        return new UpdateEngineSshResult(EngineResponse.from(e), List.copyOf(changed));
     }
 
     private static void requireSafeScript(String script, String field) {

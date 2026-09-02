@@ -4,18 +4,17 @@ import com.BPL_Order_Engine_Admin.manager.auth.UserPrincipal;
 import com.BPL_Order_Engine_Admin.manager.engine.EngineEntity;
 import com.BPL_Order_Engine_Admin.manager.engine.EngineRepository;
 import com.BPL_Order_Engine_Admin.manager.user.dto.CreateUserRequest;
+import com.BPL_Order_Engine_Admin.manager.user.dto.DeleteUserResult;
 import com.BPL_Order_Engine_Admin.manager.user.dto.UpdateUserRolesRequest;
+import com.BPL_Order_Engine_Admin.manager.user.dto.UpdateUserRolesResult;
 import com.BPL_Order_Engine_Admin.manager.user.dto.UserResponse;
 import org.springframework.security.access.AccessDeniedException;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 
-import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -77,7 +76,7 @@ public class UserService {
     }
 
     @Transactional
-    public void delete(UUID id, UserPrincipal caller) {
+    public DeleteUserResult delete(UUID id, UserPrincipal caller) {
         if (caller.getUser().getId().equals(id)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "You cannot delete yourself");
         }
@@ -100,11 +99,13 @@ public class UserService {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot delete the last SYS_ADMIN");
             }
         }
+        DeleteUserResult result = new DeleteUserResult(target.getId(), target.getUsername());
         userRepository.delete(target);
+        return result;
     }
 
     @Transactional
-    public UserResponse updateRoles(UUID id, UpdateUserRolesRequest req, UserPrincipal caller) {
+    public UpdateUserRolesResult updateRoles(UUID id, UpdateUserRolesRequest req, UserPrincipal caller) {
         User target = userRepository.findById(id)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
         // ADMIN can only update USER-role users' assignments (not their role).
@@ -118,6 +119,12 @@ public class UserService {
         } else if (caller.getUser().getRoleType() != RoleType.SYS_ADMIN) {
             throw new AccessDeniedException("Access denied");
         }
+        // Snapshot the old bundle for the audit row.
+        List<String> oldCodes = target.getAssignedEngines().stream()
+            .map(EngineEntity::getCode)
+            .sorted()
+            .toList();
+        var oldRoles = List.of(new UpdateUserRolesResult.RoleAssignment(target.getRoleType(), oldCodes));
         if (req.roleType() != null) {
             target.setRoleType(req.roleType());
         }
@@ -125,7 +132,12 @@ public class UserService {
             target.setAssignedEngines(resolveEngines(req.assignedEngineCodes()));
         }
         userRepository.save(target);
-        return UserResponse.from(target);
+        List<String> newCodes = target.getAssignedEngines().stream()
+            .map(EngineEntity::getCode)
+            .sorted()
+            .toList();
+        var newRoles = List.of(new UpdateUserRolesResult.RoleAssignment(target.getRoleType(), newCodes));
+        return new UpdateUserRolesResult(UserResponse.from(target), oldRoles, newRoles);
     }
 
     private Set<EngineEntity> resolveEngines(List<String> codes) {

@@ -42,6 +42,11 @@ cp dev-secrets.template .env.local
 chmod 600 .env.local
 ```
 
+The dev secrets template sets `SPRING_PROFILES_ACTIVE=dev` and
+`CORS_ALLOWED_ORIGINS=http://localhost:5173`. The first edit you make
+on `.env.local` is to flip those to the production values; the rest is
+generating new secrets in place of `change-me`.
+
 ### 1.2 Fill in the secrets
 
 Edit `.env.local`. The required variables are documented in the
@@ -72,15 +77,62 @@ CORS_ALLOWED_ORIGINS=https://bpl-admin.example.com
 SPRING_PROFILES_ACTIVE=prod
 ```
 
-The backend's [RequiredEnvValidator](backend/src/main/java/com/BPL_Order_Engine_Admin/manager/config/RequiredEnvValidator.java)
-will refuse to start if any of the required variables is missing
-or blank. The error message lists every missing var at once.
+**Why these six matter.** The backend's
+[RequiredEnvValidator](backend/src/main/java/com/BPL_Order_Engine_Admin/manager/config/RequiredEnvValidator.java)
+runs at startup and refuses to boot if any of the six
+**`JWT_SECRET`**, **`JASYPT_ENCRYPTOR_PASSWORD`**, **`DB_URL`**,
+**`DB_USERNAME`**, **`DB_PASSWORD`**, **`CORS_ALLOWED_ORIGINS`** is
+missing or blank. The error message lists every missing var at once.
 
-### 1.3 Update the Caddyfile
+The validator fires in two situations:
 
-Edit [Caddyfile](Caddyfile). Replace the `bpl-admin.example.com`
-placeholder (the default after `{$CADDY_HOSTNAME:...}`) with the
-same hostname as `PUBLIC_URL` and `CORS_ALLOWED_ORIGINS`.
+- `SPRING_PROFILES_ACTIVE=prod` is set (the normal path).
+- **No** profile is active **and** at least one of the six vars is
+  set. This catches the common mistake of deploying the prod image
+  without the profile flag — a half-configured env is almost always
+  a real prod boot that forgot the flag, not a dev boot.
+
+A pure dev boot (no profile, no prod vars) is never blocked, so
+`run.bat` on a fresh checkout still works.
+
+**`PUBLIC_URL` is not in the validator's list.** It's consumed at
+frontend image build time as the `VITE_API_BASE_URL` Docker build
+arg (see §1.3). If it's missing, the build defaults to
+`http://localhost:8080` — the SPA will load but the WS path and API
+calls go to the wrong host. Set it deliberately.
+
+### 1.3 Build the frontend with the right public URL
+
+The frontend image is built with the public URL **baked into the JS
+bundle** as a Vite build-time env var. There is no `frontend/.env.production`
+file and no runtime injection — the value travels through the
+compose file as a build arg, into the Dockerfile's `ARG`, into Vite,
+and into the final JS.
+
+You don't need to edit the Dockerfile or the Caddyfile for the
+default hostname. The compose file at
+[docker-compose.prod.yml](docker-compose.prod.yml) reads
+`${PUBLIC_URL}` from `.env.local` and forwards it as:
+
+```yaml
+frontend:
+  build:
+    context: ./frontend
+    args:
+      VITE_API_BASE_URL: ${PUBLIC_URL}
+      VITE_USE_MOCK: "false"
+```
+
+The Dockerfile's [frontend/Dockerfile:21-24](frontend/Dockerfile#L21)
+falls back to `http://localhost:8080` and `VITE_USE_MOCK=false` if
+the arg is not passed — fine for a local smoke test on the VM, wrong
+for any deploy that has a real hostname. **Set `PUBLIC_URL` in
+`.env.local` before `docker compose build` or the JS bundle will
+point at the wrong host.**
+
+If you ever change the public URL, rebuild the frontend image
+(`docker compose -f docker-compose.prod.yml build frontend`) before
+redeploying.
 
 ### 1.4 Bring the stack up
 
@@ -337,14 +389,13 @@ can roll back.
 
 | File | Role |
 |---|---|
-| `docker-compose.prod.yml` | The production stack. |
-| `Caddyfile` | The public reverse proxy. |
+| `docker-compose.prod.yml` | The production stack. Reads `${PUBLIC_URL}` from `.env.local` and forwards it to the frontend as `VITE_API_BASE_URL`. |
+| `Caddyfile` | The public reverse proxy. Uses `{$CADDY_HOSTNAME}` (set from `.env.local` via compose) for the ACME hostname. |
 | `backend/Dockerfile` | Multi-stage build of the Spring Boot image. |
-| `frontend/Dockerfile` | Multi-stage build of the React SPA + nginx. |
+| `frontend/Dockerfile` | Multi-stage build of the React SPA + nginx. Accepts `VITE_API_BASE_URL` and `VITE_USE_MOCK` as build args; defaults are baked in for local smoke tests only. |
 | `frontend/nginx.conf` | Internal nginx config inside the frontend image. |
-| `frontend/vite.production-env.example` | Build-time env shape (committed example only). |
 | `dev-secrets.template` | The starting point for `.env.local`. |
 | `backend/src/main/resources/application-prod.properties` | The `prod` profile. |
-| `backend/src/main/java/.../RequiredEnvValidator.java` | Fail-fast env-var check. |
+| `backend/src/main/java/.../RequiredEnvValidator.java` | Fail-fast env-var check. Fires when the `prod` profile is active *or* when no profile is active but a prod-shaped env is detected. |
 | `SPEC.md` | The design contract. |
 | `README-dev.md` | The developer's guide. |

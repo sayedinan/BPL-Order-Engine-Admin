@@ -439,6 +439,7 @@ function engineAction(req: MockRequest, verb: 'start' | 'stop'): Response {
     status: engine.status,
     message: `${engine.name} ${verb === 'start' ? 'started' : 'stopped'}.`,
     transitionedAt: now,
+    exitCode: 0,
   };
   return ok(response);
 }

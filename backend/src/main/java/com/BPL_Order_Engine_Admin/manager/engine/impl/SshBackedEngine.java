@@ -111,7 +111,7 @@ public class SshBackedEngine implements OrderEngineOperations {
         }
         lastTransitionAt = Instant.now();
         status = EngineStatus.RUNNING;
-        return new EngineActionResult(engine.getCode(), engine.getName(),
+        return EngineActionResult.success(engine.getCode(), engine.getName(),
             EngineStatus.RUNNING,
             engine.getName() + " started.",
             lastTransitionAt);
@@ -133,7 +133,7 @@ public class SshBackedEngine implements OrderEngineOperations {
         }
         lastTransitionAt = Instant.now();
         status = EngineStatus.STOPPED;
-        return new EngineActionResult(engine.getCode(), engine.getName(),
+        return EngineActionResult.success(engine.getCode(), engine.getName(),
             EngineStatus.STOPPED,
             engine.getName() + " stopped.",
             lastTransitionAt);

@@ -1,5 +1,6 @@
 package com.BPL_Order_Engine_Admin.manager.web;
 
+import com.BPL_Order_Engine_Admin.manager.auth.BadCurrentPasswordException;
 import com.BPL_Order_Engine_Admin.manager.engine.EngineAuthException;
 import com.BPL_Order_Engine_Admin.manager.engine.EngineNotSupportedException;
 import com.BPL_Order_Engine_Admin.manager.engine.EngineScriptException;
@@ -14,6 +15,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -40,7 +42,12 @@ public class ApiExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
     private static final int STDERR_MAX = 2048;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    private final ObjectMapper objectMapper;
+
+    public ApiExceptionHandler(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
+    }
 
     // ---- 400: validation ----
 
@@ -68,6 +75,24 @@ public class ApiExceptionHandler {
     }
 
     // ---- 401 / 403: security ----
+
+    @ExceptionHandler(BadCredentialsException.class)
+    public ResponseEntity<Map<String, Object>> handleBadCredentials(
+            BadCredentialsException ex, HttpServletRequest req) {
+        // SPEC §4.2: login 401 message is "Invalid credentials" —
+        // no enumeration of which field was wrong. The audit row is
+        // written by AuthenticationFailureListener before we get here.
+        return error(HttpStatus.UNAUTHORIZED, "Invalid credentials", req, null);
+    }
+
+    @ExceptionHandler(BadCurrentPasswordException.class)
+    public ResponseEntity<Map<String, Object>> handleBadCurrentPassword(
+            BadCurrentPasswordException ex, HttpServletRequest req) {
+        // SPEC §4.2: change-password 401 message is
+        // "Current password is incorrect" — no enumeration. The
+        // audit row is written by AuditAspect via @Audited.
+        return error(HttpStatus.UNAUTHORIZED, ex.getMessage(), req, null);
+    }
 
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<Map<String, Object>> handleAccessDenied(

@@ -116,6 +116,12 @@ export interface EngineActionResponse {
   status: EngineStatus;
   message: string;
   transitionedAt: string;
+  /**
+   * Script exit code from the engine action. Always 0 on the success
+   * path; failures throw `EngineScriptException` (HTTP 502) before
+   * this DTO is produced. Exposed for symmetry with the audit row.
+   */
+  exitCode: number;
 }
 
 export interface LogLineResponse {

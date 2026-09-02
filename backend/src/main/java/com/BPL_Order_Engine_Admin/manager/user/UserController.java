@@ -64,7 +64,7 @@ public class UserController {
     @PreAuthorize("hasAnyRole('SYS_ADMIN', 'ADMIN')")
     @Audited(
         action = AuditAction.DELETE_USER,
-        details = "{ targetUserId: #id }"
+        details = "{ targetUserId: #result.targetUserId(), targetUsername: #result.targetUsername() }"
     )
     public ResponseEntity<Void> delete(
             @PathVariable UUID id,
@@ -77,12 +77,12 @@ public class UserController {
     @PreAuthorize("hasAnyRole('SYS_ADMIN', 'ADMIN')")
     @Audited(
         action = AuditAction.UPDATE_USER_ROLES,
-        details = "{ targetUserId: #id, newRole: #result.role() }"
+        details = "{ targetUserId: #id, oldRoles: #result.oldRoles(), newRoles: #result.newRoles() }"
     )
     public UserResponse updateRoles(
             @PathVariable UUID id,
             @RequestBody UpdateUserRolesRequest req,
             @AuthenticationPrincipal UserPrincipal caller) {
-        return userService.updateRoles(id, req, caller);
+        return userService.updateRoles(id, req, caller).user();
     }
 }

@@ -84,11 +84,11 @@ public class EngineController {
     @Audited(
         action = AuditAction.UPDATE_ENGINE_SSH,
         targetEngineFromPath = true,
-        details = "{ engineCode: #code }"
+        details = "{ engineCode: #code, fieldsChanged: #result.fieldsChanged() }"
     )
     public EngineResponse updateSsh(@PathVariable String code,
                                     @RequestBody UpdateEngineSshRequest req) {
-        return engineService.updateSsh(code, req);
+        return engineService.updateSsh(code, req).engine();
     }
 
     // ---- Action endpoints (task #18) ----
@@ -105,7 +105,7 @@ public class EngineController {
     @Audited(
         action = AuditAction.START_ENGINE,
         targetEngineFromPath = true,
-        details = "{ engineCode: #code, status: #result.status() }"
+        details = "{ engineCode: #code, status: #result.status(), exitCode: #result.exitCode() }"
     )
     public EngineActionResponse start(@PathVariable String code,
                                      @AuthenticationPrincipal UserPrincipal principal) {
@@ -117,7 +117,7 @@ public class EngineController {
     @Audited(
         action = AuditAction.STOP_ENGINE,
         targetEngineFromPath = true,
-        details = "{ engineCode: #code, status: #result.status() }"
+        details = "{ engineCode: #code, status: #result.status(), exitCode: #result.exitCode() }"
     )
     public EngineActionResponse stop(@PathVariable String code,
                                     @AuthenticationPrincipal UserPrincipal principal) {

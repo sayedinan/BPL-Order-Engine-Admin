@@ -287,16 +287,12 @@ in `SshClientProvider`; the next `status` call attempts to connect.
 |---|---|---|
 | 200 | — (EngineActionResponse) | `START_ENGINE`, success: `details: { engineCode, exitCode: 0 }` |
 | 403 | `Access denied` (USER without assignment) | — |
+| 403 | `SSH authentication failed for engine 'bpl'` (`EngineAuthException` → 403, per SPEC §6.2 "Auth failure → 403, no retry") | `START_ENGINE`, `details: { engineCode, error: "EngineAuthException" }` |
 | 404 | `Engine 'bpl' is not supported` | — |
 | 409 | `Engine 'bpl' is already RUNNING` | `START_ENGINE`, `details: { engineCode, error: "Conflict", message: "Already running" }` |
 | 502 | `Engine 'bpl' is unreachable` (SSH connect fail, after retry) | `START_ENGINE`, `details: { engineCode, error: "EngineUnreachableException" }` |
 | 502 | `Script exited with code 127` (non-zero exit; details has exitCode + truncated stderr ≤ 2KB) | `START_ENGINE`, `details: { engineCode, exitCode, stderr, error: "EngineScriptException" }` |
-| 502 | `SSH authentication failed for engine 'bpl'` (EngineAuthException → 403 in audit, but returned as 502? — see notes) | `START_ENGINE`, `details: { engineCode, error: "EngineAuthException" }` |
 | 504 | `Operation timed out` (`Future.get(30, SECONDS)` exceeded) | `START_ENGINE`, `details: { engineCode, error: "TimeoutException" }` |
-
-> **Note on the auth case:** SPEC §6.2 says "Auth failure → 403, no retry."
-> The v0.3 frontend treats both 403 and 502 with the same `err.message` in
-> the UI. The audit row always records the actual class.
 
 ### 2.7 `POST /api/engines/{code}/stop` (role + assignment)
 

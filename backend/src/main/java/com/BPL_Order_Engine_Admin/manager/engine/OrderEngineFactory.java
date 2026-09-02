@@ -34,7 +34,7 @@ public class OrderEngineFactory {
             SshClientProvider sshClientProvider,
             @Value("${app.ssh.connect-timeout:5s}") Duration connectTimeout,
             @Value("${app.ssh.start-stop-timeout:30s}") Duration startStopTimeout,
-            @Value("${app.ssh.connect-timeout:5s}") Duration logsOpTimeout) {
+            @Value("${app.ssh.logs-operation-timeout:10s}") Duration logsOpTimeout) {
         this.engineRepository = engineRepository;
         this.sshClientProvider = sshClientProvider;
         this.connectTimeout = connectTimeout;

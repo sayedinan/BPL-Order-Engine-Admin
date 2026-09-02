@@ -66,7 +66,8 @@ public class MockEngineOperations implements OrderEngineOperations {
             status.set(EngineStatus.RUNNING);
             lastTransitionAt = Instant.now();
             push(new LogLine(lastTransitionAt, "INFO", name + " started (mock)"));
-            return new EngineActionResult(code, name, status.get(), name + " started (mock).", lastTransitionAt);
+            return EngineActionResult.success(code, name, status.get(),
+                name + " started (mock).", lastTransitionAt);
         } finally {
             transitionLock.unlock();
         }
@@ -82,7 +83,8 @@ public class MockEngineOperations implements OrderEngineOperations {
             status.set(EngineStatus.STOPPED);
             lastTransitionAt = Instant.now();
             push(new LogLine(lastTransitionAt, "INFO", name + " stopped (mock)"));
-            return new EngineActionResult(code, name, status.get(), name + " stopped (mock).", lastTransitionAt);
+            return EngineActionResult.success(code, name, status.get(),
+                name + " stopped (mock).", lastTransitionAt);
         } finally {
             transitionLock.unlock();
         }

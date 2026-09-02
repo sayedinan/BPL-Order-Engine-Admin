@@ -88,64 +88,74 @@ BPL-Order-Engine-Admin/
 │       ├── backend-agent.md            # implements backend against this SPEC
 │       ├── frontend-agent.md           # implements the React UI against this SPEC
 │       └── qa-reviewer.md              # read-only reviewer, flags RBAC/audit/secrets drift
-├── BPL-Order-Engine-Admin-backend/     # Spring Boot 4.1.1, Gradle 9.7.1, Java 17
-│   ├── build.gradle                    # deps: webmvc, security, websocket, data-jpa, validation, flyway, postgresql, jjwt, jasypt, sshd, lombok
+├── backend/                              # Spring Boot 4.1.1, Gradle 9.7.1, Java 17
+│   ├── build.gradle                       # deps: webmvc, security, websocket, data-jpa, validation, flyway, postgresql, jjwt, jasypt, sshd, lombok, testcontainers, h2
 │   ├── settings.gradle
 │   ├── gradle/wrapper/
 │   ├── gradlew, gradlew.bat
 │   └── src/
 │       ├── main/java/com/BPL_Order_Engine_Admin/manager/
 │       │   ├── BplOrderEngineAdminBackendApplication.java
-│       │   ├── auth/                   # AuthController, AuthService, JwtAuthFilter, JwtService
-│       │   ├── user/                   # User entity, UserRepository, UserService, UserController
+│       │   ├── auth/                      # AuthController, AuthService, JwtAuthFilter, JwtService, UserPrincipal
+│       │   │   ├── validation/            # PasswordStrength + PasswordStrengthValidator
+│       │   │   └── dto/                   # LoginRequest, LoginResponse, ChangePasswordRequest, UserSummary
+│       │   ├── user/                      # User entity, UserRepository, UserService, UserController
+│       │   │   └── dto/                   # CreateUserRequest, UpdateUserRolesRequest, UserResponse
 │       │   ├── engine/
 │       │   │   ├── OrderEngineOperations.java   # interface — preserved from v0.2
 │       │   │   ├── OrderEngineFactory.java      # looks up by EngineRepository.findByCode
 │       │   │   ├── EngineStatus.java
 │       │   │   ├── EngineMode.java              # MOCK, REAL
+│       │   │   ├── EngineActionResult.java      # record returned by start/stop; carries exitCode
 │       │   │   ├── EngineNotSupportedException.java
 │       │   │   ├── EngineUnreachableException.java
 │       │   │   ├── EngineAuthException.java
 │       │   │   ├── EngineScriptException.java
 │       │   │   ├── LogLine.java
-│       │   │   ├── EngineEntity.java            # JPA: id, code, name, serverIp, serverUsername, serverPassword (@Encrypted), scripts, mode, status, deletedAt
-│       │   │   ├── EngineRepository.java
-│       │   │   ├── EngineService.java
-│       │   │   ├── EngineController.java
 │       │   │   ├── LogBuffer.java               # per-engine rolling deque<LogLine>, cap 500
 │       │   │   ├── LogTailerRegistry.java       # one Thread per RUNNING REAL engine
+│       │   │   ├── SshClientProvider.java       # per-engine cached SshClient, idle-evicted at 5m
+│       │   │   ├── EngineEntity.java            # JPA: id, code, name, serverIp, serverUsername, serverPassword (@Encrypted), scripts, mode, status, deletedAt
+│       │   │   ├── EngineRepository.java
+│       │   │   ├── EngineService.java           # CRUD (create / soft-delete / updateSsh / list)
+│       │   │   ├── EngineActionService.java     # status / start / stop / logs (per-user assignment filter)
+│       │   │   ├── EngineController.java
+│       │   │   ├── dto/                         # CreateEngineRequest, UpdateEngineSshRequest, EngineResponse, EngineStatusResponse, EngineActionResponse, LogLineResponse, LogPageResponse
 │       │   │   ├── impl/
 │       │   │   │   ├── SshBackedEngine.java     # Apache MINA SSHD
 │       │   │   │   └── MockEngineOperations.java
 │       │   │   └── ws/
-│       │   │       └── EngineLogsWebSocketHandler.java
+│       │   │       ├── EngineLogsWebSocketHandler.java
+│       │   │       ├── WebSocketConfig.java
+│       │   │       └── WebSocketSessionRegistry.java
 │       │   ├── audit/
 │       │   │   ├── AuditLog.java                # JPA: id, timestamp, actorUsername, actorRole, action enum, targetEngineCode, details (jsonb)
 │       │   │   ├── AuditAction.java
 │       │   │   ├── AuditLogRepository.java
-│       │   │   ├── @Audited.java                # annotation
+│       │   │   ├── Audited.java                 # annotation
 │       │   │   ├── AuditAspect.java             # AOP aspect
 │       │   │   ├── AuditService.java
+│       │   │   ├── AuditLogController.java      # GET /api/audit-logs
 │       │   │   ├── AuthenticationSuccessListener.java
-│       │   │   └── AuthenticationFailureListener.java
+│       │   │   ├── AuthenticationFailureListener.java
+│       │   │   └── dto/AuditLogResponse.java
 │       │   ├── web/
-│       │   │   ├── ApiExceptionHandler.java     # @ControllerAdvice → standard error envelope
-│       │   │   └── WebSocketConfig.java
+│       │   │   └── ApiExceptionHandler.java     # @ControllerAdvice → standard error envelope
 │       │   └── config/
 │       │       ├── SecurityConfig.java          # JWT filter, JPA UserDetailsService, @PreAuthorize
 │       │       ├── CorsConfig.java              # http://localhost:5173 → :8080 in dev with allowCredentials=true
 │       │       ├── JasyptConfig.java            # StringEncryptor bean from JASYPT_ENCRYPTOR_PASSWORD env var
-│       │       └── JacksonConfig.java           # java.time + JavaTimeModule, NON_NULL on responses
+│       │       ├── JacksonConfig.java           # java.time + JavaTimeModule, NON_NULL on responses
+│       │       └── DevDataInitializer.java      # dev profile only: seeds sysadmin/admin/user1/user2
 │       ├── main/resources/
 │       │   ├── application.properties           # base — env-driven, no secrets
 │       │   ├── application-dev.properties       # dev profile overrides
 │       │   ├── application-prod.properties      # prod profile
 │       │   └── db/migration/
-│       │       ├── V1__init.sql                 # users, engines, audit_log, user_engine_access
-│       │       └── V2__seed_admin.sql           # dev profile only
+│       │       └── V1__init.sql                 # users, engines, audit_log, user_engine_access
 │       └── test/java/com/BPL_Order_Engine_Admin/manager/
 │           ├── auth/, user/, engine/, audit/, web/
-└── BPL-Order_Engine-Admin_ui/                  # Vite 8 + React 19 + TypeScript 6
+└── frontend/                                 # Vite 8 + React 19 + TypeScript 6
     ├── package.json
     ├── tsconfig.json, tsconfig.app.json, tsconfig.node.json
     ├── vite.config.ts
@@ -182,7 +192,7 @@ BPL-Order-Engine-Admin/
 | Pattern | Where | Why |
 |---|---|---|
 | **Strategy / common interface** | `OrderEngineOperations` | One contract (`engineId`, `displayName`, `status`, `start`, `stop`, `getLogs(int)`, `currentMode`) implemented by exactly two classes: `SshBackedEngine` and `MockEngineOperations`. |
-| **Factory Method (DB-backed)** | `OrderEngineFactory` | Resolves an `OrderEngineOperations` by `engineId` string. Looks up the `Engine` row via `EngineRepository.findByCode(...)`, then constructs/returns the appropriate `OrderEngineOperations` (the cached `MockEngineOperations` instance, or a per-engine `SshBackedEngine` wrapper around the row). On miss → `EngineNotSupportedException` → 404. |
+| **Factory Method (DB-backed)** | `OrderEngineFactory` | Resolves an `OrderEngineOperations` by `engineId` string. Looks up the `Engine` row via `EngineRepository.findByCode(...)`, then constructs a fresh per-call instance of the appropriate `OrderEngineOperations` (`new MockEngineOperations(engine)` for MOCK, `new SshBackedEngine(engine, sshClientProvider, …)` for REAL). The fresh instance holds the per-engine state (status, lastTransitionAt, log buffer for MOCK); the `SshClientProvider` retains a shared SshClient cache by engine code to amortize connect cost. On miss → `EngineNotSupportedException` → 404. |
 | **JPA entities** | `User`, `Engine`, `AuditLog` | UUID PKs, `@Version` for optimistic locking, `@Getter`/`@Setter` (not `@Data`), `LAZY` on to-many. See `jpa-entity-patterns.md`. |
 | **JWT auth filter** | `JwtAuthFilter` | Once-per-request: extract `Authorization: Bearer <token>`, validate with `JwtService`, populate `SecurityContext`. Stateless — no server-side session. |
 | **Method-level RBAC** | `@PreAuthorize` on controllers | The 3-role matrix is enforced server-side, not just hidden in the UI. |
@@ -200,13 +210,15 @@ Base package: `com.BPL_Order_Engine_Admin.manager`
 manager/
 ├── BplOrderEngineAdminBackendApplication.java
 ├── auth/
-│   ├── AuthController.java             # POST /api/auth/login, POST /api/auth/logout, GET /api/auth/me
+│   ├── AuthController.java             # POST /api/auth/login, POST /api/auth/logout, GET /api/auth/me, POST /api/auth/change-password
 │   ├── AuthService.java
 │   ├── JwtService.java                 # sign/validate, reads JWT_SECRET env var
 │   ├── JwtAuthFilter.java              # OncePerRequestFilter, extracts Bearer token
-│   ├── LoginRequest.java
-│   ├── LoginResponse.java
-│   └── UserPrincipal.java               # UserDetails impl wrapping User entity
+│   ├── UserPrincipal.java              # UserDetails impl wrapping User entity
+│   ├── validation/
+│   │   ├── PasswordStrength.java       # @interface
+│   │   └── PasswordStrengthValidator.java
+│   └── dto/ (LoginRequest, LoginResponse, ChangePasswordRequest, UserSummary)
 ├── user/
 │   ├── User.java                       # JPA entity
 │   ├── RoleType.java                   # enum: SYS_ADMIN, ADMIN, USER
@@ -221,11 +233,14 @@ manager/
 │   ├── EngineMode.java                 # enum: MOCK, REAL
 │   ├── EngineEntity.java               # JPA entity (note: Entity suffix to avoid clashing with the interface)
 │   ├── EngineRepository.java
-│   ├── EngineService.java
+│   ├── EngineService.java              # CRUD (create / soft-delete / updateSsh / list)
+│   ├── EngineActionService.java        # status / start / stop / logs (per-user assignment filter)
 │   ├── EngineController.java
+│   ├── EngineActionResult.java         # record returned by start/stop; carries exitCode
 │   ├── LogLine.java
 │   ├── LogBuffer.java                  # per-engine deque<LogLine>, cap 500
 │   ├── LogTailerRegistry.java
+│   ├── SshClientProvider.java          # per-engine cached SshClient, idle-evicted at 5m
 │   ├── EngineNotSupportedException.java
 │   ├── EngineUnreachableException.java
 │   ├── EngineAuthException.java
@@ -235,6 +250,7 @@ manager/
 │   │   └── MockEngineOperations.java   # in-memory state machine (formerly BplOrderEngineOperations)
 │   ├── ws/
 │   │   ├── EngineLogsWebSocketHandler.java
+│   │   ├── WebSocketConfig.java        # /api/engines/{code}/logs/stream registration
 │   │   └── WebSocketSessionRegistry.java
 │   └── dto/ (EngineStatusResponse, EngineActionResponse, LogLineResponse, LogPageResponse, CreateEngineRequest, UpdateEngineSshRequest, EngineResponse)
 ├── audit/
@@ -244,16 +260,18 @@ manager/
 │   ├── Audited.java                    # @interface
 │   ├── AuditAspect.java
 │   ├── AuditService.java
+│   ├── AuditLogController.java         # GET /api/audit-logs
 │   ├── AuthenticationSuccessListener.java
-│   └── AuthenticationFailureListener.java
+│   ├── AuthenticationFailureListener.java
+│   └── dto/AuditLogResponse.java
 ├── web/
-│   ├── ApiExceptionHandler.java        # @ControllerAdvice → standard error envelope
-│   └── WebSocketConfig.java
+│   └── ApiExceptionHandler.java        # @ControllerAdvice → standard error envelope
 └── config/
     ├── SecurityConfig.java             # JWT filter, JPA UserDetailsService, @PreAuthorize
     ├── CorsConfig.java
     ├── JasyptConfig.java
-    └── JacksonConfig.java
+    ├── JacksonConfig.java
+    └── DevDataInitializer.java         # dev profile only: seeds sysadmin/admin/user1/user2
 ```
 
 ### 2.4 `build.gradle` dependencies
@@ -281,12 +299,23 @@ dependencies {
     implementation 'org.apache.sshd:sshd-core:2.13.2'
     implementation 'org.apache.sshd:sshd-common:2.13.2'
 
-    compileOnly      'org.projectlombok:lombok'
-    annotationProcessor 'org.projectlombok:lombok'
+    // H2 lets `gradlew bootRun` smoke-verify the app against an in-memory
+    // database when a Postgres instance isn't handy; postgres is still
+    // the dev/prod default via docker compose.
+    runtimeOnly    'com.h2database:h2:2.2.224'
 
-    testImplementation 'org.springframework.boot:spring-boot-starter-test'
-    testImplementation 'org.springframework.security:spring-security-test'
-    testRuntimeOnly    'org.junit.platform:junit-platform-launcher'
+    compileOnly           'org.projectlombok:lombok'
+    annotationProcessor   'org.projectlombok:lombok'
+
+    testImplementation     'org.springframework.boot:spring-boot-starter-test'
+    testImplementation     'org.springframework.security:spring-security-test'
+    testImplementation     'org.springframework.boot:spring-boot-testcontainers'
+    testImplementation     'org.testcontainers:junit-jupiter:1.20.4'
+    testImplementation     'org.testcontainers:postgresql:1.20.4'
+    runtimeOnly            'com.h2database:h2:2.2.224'
+    testRuntimeOnly        'org.junit.platform:junit-platform-launcher'
+    testCompileOnly        'org.projectlombok:lombok'
+    testAnnotationProcessor 'org.projectlombok:lombok'
 }
 ```
 
@@ -426,25 +455,24 @@ The two implementations:
 @Component
 public class OrderEngineFactory {
     private final EngineRepository engineRepository;
-    private final MockEngineOperations mockImpl;        // singleton — the mock is stateless except for its own state
     private final SshClientProvider sshClientProvider;  // provides per-engine SshClient caches
+    private final Duration connectTimeout;
+    private final Duration startStopTimeout;
+    private final Duration logsOpTimeout;
 
     public OrderEngineOperations get(String code) {
-        return engineRepository.findByCodeAndDeletedAtIsNull(code)
-            .map(this::resolve)
+        EngineEntity engine = engineRepository.findByCodeAndDeletedAtIsNull(code)
             .orElseThrow(() -> new EngineNotSupportedException(code));
-    }
-
-    private OrderEngineOperations resolve(Engine engine) {
         return switch (engine.getMode()) {
-            case MOCK -> mockImpl.forEngine(engine);   // returns a thin wrapper bound to this engine
-            case REAL -> new SshBackedEngine(engine, sshClientProvider);
+            case MOCK -> new MockEngineOperations(engine);   // per-engine state lives in the instance
+            case REAL -> new SshBackedEngine(engine, sshClientProvider,
+                connectTimeout, startStopTimeout, logsOpTimeout);
         };
     }
 }
 ```
 
-The `mockImpl.forEngine(engine)` is a thin per-engine wrapper around the singleton's state machine — multiple `MOCK` engines don't share state. The singleton is just the dispatcher; the actual `AtomicReference<EngineStatus>` lives in the wrapper.
+The factory returns a **fresh** `OrderEngineOperations` per call. The MOCK implementation holds its own `AtomicReference<EngineStatus>`, `Instant lastTransitionAt`, and `Deque<LogLine>` — so two MOCK engine rows do not share state. The REAL implementation is a thin wrapper around the engine row plus the shared `SshClientProvider` cache (so credential rotation and IP changes take effect on the next call, while the underlying TCP connection is amortized).
 
 ---
 
@@ -481,7 +509,7 @@ The `mockImpl.forEngine(engine)` is a thin per-engine wrapper around the singlet
 { "token": "eyJhbGciOi...", "expiresAt": "2026-09-01T17:02:11Z", "user": { "id": "...", "username": "admin", "role": "SYS_ADMIN", "assignedEngineCodes": [] }, "mustChangePassword": true }
 ```
 
-- 401 on bad credentials. `LOGIN_FAIL` audit row written with `reason: "BAD_CREDENTIALS"`. The response body's `message` is `"Invalid credentials"` — no enumeration of which field was wrong.
+- 401 on bad credentials. `LOGIN_FAIL` audit row written with `reason: "BAD_CREDENTIALS"`. The response body's `message` is `"Invalid credentials"` — no enumeration of which field was wrong. (The server throws `BadCredentialsException("Invalid credentials")` from `AuthService`; `ApiExceptionHandler` maps it to 401 with that message.)
 - 403 if the user is disabled. `LOGIN_FAIL` with `reason: "USER_DISABLED"`. (Disabled users are not in v0.3's data model; the field is reserved for v0.4. The audit reason enum still exists so future code can write it without a migration.)
 - BCrypt verification with strength 10. No password is logged or returned, even hashed.
 - The `mustChangePassword` field in the response mirrors the `User.mustChangePassword` flag at login time. The same value is also carried in the JWT `mustChangePassword` claim so the client can route to `/change-password` from a fresh token without an extra round trip. The flag is `true` for newly created users and after a password rotation by an admin; it becomes `false` only after a successful `POST /api/auth/change-password`.
@@ -938,11 +966,11 @@ app.cors.allowed-origins=${CORS_ALLOWED_ORIGINS}
 
 Missing `JWT_SECRET` or `JASYPT_ENCRYPTOR_PASSWORD` → app fails to start with a clear error.
 
-### 8.2 Flyway migrations
+### 8.2 Flyway migrations & dev seed
 
 - `V1__init.sql`: creates `users`, `engines`, `audit_log`, `user_engine_access`. UUIDs as `uuid` type; `audit_log.details` as `jsonb`; indexes on `audit_log.timestamp`, `audit_log.actorUsername`, `audit_log.targetEngineCode`.
-- `V2__seed_admin.sql` (dev profile only): inserts a single `SYS_ADMIN` with a known BCrypt-hashed password. The plaintext is in `application-dev.properties` as a comment (`# DEV ONLY: seed password is "..."`). Never in the SQL.
-- No `spring.jpa.hibernate.ddl-auto=update` in any profile. Flyway is the source of truth.
+- **Dev seed** (no SQL migration): `config/DevDataInitializer.java` is a `@Component` that runs on the `dev` profile only and seeds four users (`sysadmin`/`admin`/`user1`/`user2`) plus two MOCK engines (`BPL`/`PCL`) on first boot, when the `users` table is empty. The plaintext passwords and engine names live in the source as `@Value("${app.dev-seed.*:…}")` with dev defaults; the BCrypt hashes are produced at seed time, never stored. The seed is a no-op if any user row already exists. Demo credentials are documented in `README-dev.md`.
+- No `spring.jpa.hibernate.ddl-auto=update` in any profile. Flyway is the source of truth for schema.
 
 ---
 
